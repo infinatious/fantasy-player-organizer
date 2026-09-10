@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSeasonWeek } from "@/context/SeasonWeekContext";
-import { teamGlowStyle, playerImageUrl, positionBadgeClasses, TEAM_COLORS } from "@/lib/teamColors";
+import { teamGlowStyle, playerImageUrl, positionBadgeClasses, teamLogoUrl, TEAM_COLORS } from "@/lib/teamColors";
 
 interface DashboardLeagueRef {
   leagueId: number;
@@ -41,9 +41,21 @@ interface DashboardTimeslot {
   games: DashboardGame[];
 }
 
+// A league counts as "high weight" (high stakes — money/serious leagues)
+// above this cutoff on the 1-10 importance scale.
+const HIGH_WEIGHT_THRESHOLD = 7;
+
 // Rooting-score bands, shaded red (strongly against) through yellow (mixed)
-// to green (strongly for).
-function rootingTier(score: number): { label: string; className: string } {
+// to green (strongly for). "Strongly Root Against" is reserved for players
+// who are an opponent in more than one league — a single lopsided league
+// shouldn't read as strongly as being against you everywhere. Within "Root
+// Against", the shade escalates to red when a high-importance league is
+// driving it, even if it's still just the one league.
+function rootingTier(score: number, opponentLeagues: DashboardLeagueRef[]): { label: string; className: string } {
+  const opponentLeagueCount = opponentLeagues.length;
+  const maxOpponentWeight = opponentLeagues.reduce((max, l) => Math.max(max, l.leagueWeight), 0);
+  const highWeight = maxOpponentWeight >= HIGH_WEIGHT_THRESHOLD;
+
   if (score >= 66) {
     return { label: "Root For", className: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" };
   }
@@ -56,10 +68,12 @@ function rootingTier(score: number): { label: string; className: string } {
   if (score >= -20) {
     return { label: "Mixed", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300" };
   }
-  if (score >= -50) {
+  if (score >= -50 || opponentLeagueCount < 2) {
     return {
       label: "Root Against",
-      className: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
+      className: highWeight
+        ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+        : "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
     };
   }
   return {
@@ -193,12 +207,28 @@ export default function DashboardPage() {
                             {teamGroup.team ?? "No Team"}
                           </h4>
                           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                            {teamGroup.players.map((p) => (
+                            {teamGroup.players.map((p) => {
+                              const opponentLeagues = p.leagues.filter((l) => l.side === "opponent");
+                              const tier = rootingTier(p.score, opponentLeagues);
+                              return (
                               <div
                                 key={p.playerId}
                                 style={teamGlowStyle(p.team)}
-                                className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
+                                className="relative overflow-hidden rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
                               >
+                                {p.team && (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={teamLogoUrl(p.team)}
+                                    alt=""
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute -right-6 -bottom-6 h-32 w-32 object-contain opacity-[0.05] grayscale dark:opacity-[0.08]"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = "none";
+                                    }}
+                                  />
+                                )}
+                                <div className="relative">
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex min-w-0 items-center gap-2.5">
                                     {p.playerId && (
@@ -247,9 +277,9 @@ export default function DashboardPage() {
                                     </div>
                                   </div>
                                   <span
-                                    className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${rootingTier(p.score).className}`}
+                                    className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${tier.className}`}
                                   >
-                                    {rootingTier(p.score).label}
+                                    {tier.label}
                                   </span>
                                 </div>
                                 <ul className="mt-2 space-y-0.5">
@@ -264,8 +294,10 @@ export default function DashboardPage() {
                                     </li>
                                   ))}
                                 </ul>
+                                </div>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       ))}

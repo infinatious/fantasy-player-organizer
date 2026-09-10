@@ -61,6 +61,10 @@ export function playerImageUrl(playerId: string, position: string | null): strin
   return `https://sleepercdn.com/content/nfl/players/${playerId}.jpg`;
 }
 
+export function teamLogoUrl(team: string): string {
+  return `https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.png`;
+}
+
 // Groups the various position codes (including IDP sub-positions) into the
 // 8 color buckets used for the dashboard's position badge.
 const POSITION_GROUP: Record<string, string> = {
