@@ -1,69 +1,224 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSeasonWeek } from "@/context/SeasonWeekContext";
+import { teamGlowStyle, playerImageUrl } from "@/lib/teamColors";
+
+interface DashboardLeagueRef {
+  leagueId: number;
+  leagueName: string;
+  leagueWeight: number;
+  side: "mine" | "opponent";
+  opponentLabel: string | null;
+}
+
+interface DashboardPlayer {
+  playerId: string | null;
+  name: string;
+  team: string | null;
+  position: string | null;
+  injuryStatus: string | null;
+  opponent: string | null;
+  kickoffIso: string | null;
+  sentiment: "for" | "against" | "mixed";
+  score: number;
+  leagues: DashboardLeagueRef[];
+}
+
+interface DashboardGame {
+  label: string | null;
+  kickoffIso: string | null;
+  players: DashboardPlayer[];
+}
+
+interface DashboardTimeslot {
+  name: string;
+  games: DashboardGame[];
+}
+
+const SENTIMENT_STYLE: Record<DashboardPlayer["sentiment"], string> = {
+  for: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+  against: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  mixed: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+};
+
+const SENTIMENT_LABEL: Record<DashboardPlayer["sentiment"], string> = {
+  for: "Root For",
+  against: "Root Against",
+  mixed: "Mixed",
+};
+
+function formatScore(score: number): string {
+  if (score > 0) return `+${score}`;
+  return `${score}`;
+}
+
+function formatKickoff(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export default function DashboardPage() {
+  const { seasonYear, weekNumber } = useSeasonWeek();
+  const [timeslots, setTimeslots] = useState<DashboardTimeslot[]>([]);
+  const [unmatchedCount, setUnmatchedCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const res = await fetch(`/api/dashboard?season=${seasonYear}&week=${weekNumber}`);
+    const data = await res.json();
+    setTimeslots(data.timeslots ?? []);
+    setUnmatchedCount(data.unmatchedCount ?? 0);
+    setLoading(false);
+  }, [seasonYear, weekNumber]);
+
+  useEffect(() => {
+    (async () => {
+      await load();
+    })();
+  }, [load]);
+
+  async function refreshSchedule() {
+    setRefreshing(true);
+    setError(null);
+    const res = await fetch(`/api/schedule?season=${seasonYear}&week=${weekNumber}&force=true`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Failed to refresh schedule");
+    }
+    await load();
+    setRefreshing(false);
+  }
+
+  const totalPlayers = timeslots.reduce(
+    (sum, t) => sum + t.games.reduce((gsum, g) => gsum + g.players.length, 0),
+    0
+  );
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">
+            Week {weekNumber} Dashboard — {seasonYear}
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-sm text-neutral-500">
+            Who to watch, grouped by kickoff time, across all your leagues.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <button
+          onClick={refreshSchedule}
+          disabled={refreshing}
+          className="rounded border border-neutral-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-neutral-700"
+        >
+          {refreshing ? "Refreshing…" : "Refresh Schedule"}
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {unmatchedCount > 0 && (
+        <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+          {unmatchedCount} pasted player{unmatchedCount === 1 ? "" : "s"} couldn&apos;t be matched.{" "}
+          <Link href="/entry" className="underline">
+            Review in Enter Rosters
+          </Link>
+          .
+        </p>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : totalPlayers === 0 ? (
+        <p className="text-sm text-neutral-500">
+          No rosters saved for this week yet.{" "}
+          <Link href="/entry" className="text-blue-600 hover:underline">
+            Paste your rosters
+          </Link>{" "}
+          to get started.
+        </p>
+      ) : (
+        <div className="space-y-6">
+          {timeslots.map((slot) => (
+            <section key={slot.name}>
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+                {slot.name}
+              </h2>
+              <div className="space-y-4">
+                {slot.games.map((game, gi) => (
+                  <div key={gi}>
+                    {game.label && (
+                      <h3 className="mb-1.5 text-xs font-semibold text-neutral-400">
+                        {game.label}
+                        {game.kickoffIso ? ` · ${formatKickoff(game.kickoffIso)}` : ""}
+                      </h3>
+                    )}
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                      {game.players.map((p) => (
+                        <div
+                          key={p.playerId}
+                          style={teamGlowStyle(p.team)}
+                          className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 items-start gap-2.5">
+                              {p.playerId && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={playerImageUrl(p.playerId, p.position)}
+                                  alt=""
+                                  className="h-14 w-14 shrink-0 rounded-full bg-neutral-200 object-cover dark:bg-neutral-800"
+                                  onError={(e) => {
+                                    e.currentTarget.style.visibility = "hidden";
+                                  }}
+                                />
+                              )}
+                              <div className="min-w-0">
+                                <p className="player-name text-lg">{p.name}</p>
+                                <p className="text-xs text-neutral-500">
+                                  {p.position} {p.team}
+                                  {!game.label && p.opponent ? ` vs ${p.opponent}` : ""}
+                                  {p.injuryStatus ? ` · ${p.injuryStatus}` : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <span
+                              className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${SENTIMENT_STYLE[p.sentiment]}`}
+                            >
+                              {SENTIMENT_LABEL[p.sentiment]} ({formatScore(p.score)})
+                            </span>
+                          </div>
+                          <ul className="mt-2 space-y-0.5">
+                            {p.leagues.map((l, i) => (
+                              <li key={i} className="text-xs text-neutral-500">
+                                <span className={l.side === "mine" ? "text-green-600" : "text-red-600"}>
+                                  {l.side === "mine" ? "Your team" : "Opponent"}
+                                </span>{" "}
+                                in {l.leagueName}
+                                {l.side === "opponent" && l.opponentLabel ? ` (${l.opponentLabel})` : ""}
+                                <span className="text-neutral-400"> · weight {l.leagueWeight}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
-      </main>
+      )}
     </div>
   );
 }

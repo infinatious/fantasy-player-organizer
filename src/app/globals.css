@@ -5,10 +5,16 @@
   --foreground: #171717;
 }
 
+/* Scales every rem-based Tailwind utility (text, padding, gaps, sizing) up
+   proportionally for a generally larger UI, without touching each component. */
+html {
+  font-size: 18px;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-app-sans);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -22,5 +28,15 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3 {
+  font-family: var(--font-expanded);
+}
+
+.player-name {
+  font-family: var(--font-condensed);
+  font-weight: 600;
+  -webkit-text-stroke: 0.3px currentColor;
 }
