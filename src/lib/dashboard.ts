@@ -184,3 +184,36 @@ export function buildDashboard(seasonYear: number, weekNumber: number): Dashboar
 
   return { timeslots, unmatchedCount: unmatched.length };
 }
+
+export interface LeagueEntryStatus {
+  leagueId: number;
+  leagueName: string;
+  hasMine: boolean;
+  hasOpponent: boolean;
+}
+
+// Per-league checklist for a given week: has this side been pasted in yet?
+// Backs the "you haven't finished entering rosters this week" reminder.
+export function getWeeklyEntryStatus(seasonYear: number, weekNumber: number): LeagueEntryStatus[] {
+  const db = getDb();
+  const leagues = db.prepare("SELECT id, name FROM leagues ORDER BY created_at ASC").all() as {
+    id: number;
+    name: string;
+  }[];
+  const rows = db
+    .prepare("SELECT DISTINCT league_id, side FROM roster_entries WHERE season_year = ? AND week_number = ?")
+    .all(seasonYear, weekNumber) as { league_id: number; side: "mine" | "opponent" }[];
+
+  const sidesByLeague = new Map<number, Set<string>>();
+  for (const r of rows) {
+    if (!sidesByLeague.has(r.league_id)) sidesByLeague.set(r.league_id, new Set());
+    sidesByLeague.get(r.league_id)!.add(r.side);
+  }
+
+  return leagues.map((l) => ({
+    leagueId: l.id,
+    leagueName: l.name,
+    hasMine: sidesByLeague.get(l.id)?.has("mine") ?? false,
+    hasOpponent: sidesByLeague.get(l.id)?.has("opponent") ?? false,
+  }));
+}

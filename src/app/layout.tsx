@@ -3,6 +3,7 @@ import { Special_Gothic, Special_Gothic_Condensed_One, Special_Gothic_Expanded_O
 import "./globals.css";
 import { SeasonWeekProvider } from "@/context/SeasonWeekContext";
 import { NavBar } from "@/components/NavBar";
+import { WeeklyReminderBanner } from "@/components/WeeklyReminderBanner";
 
 // Galano Grotesque isn't available (it's a commercial font, not distributed
 // through Google Fonts or any other free source we can pull from), so this
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
         <SeasonWeekProvider>
           <NavBar />
+          <WeeklyReminderBanner />
           <main className="w-full flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
         </SeasonWeekProvider>
       </body>
