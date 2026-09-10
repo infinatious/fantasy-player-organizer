@@ -60,3 +60,47 @@ export function playerImageUrl(playerId: string, position: string | null): strin
   }
   return `https://sleepercdn.com/content/nfl/players/${playerId}.jpg`;
 }
+
+// Groups the various position codes (including IDP sub-positions) into the
+// 8 color buckets used for the dashboard's position badge.
+const POSITION_GROUP: Record<string, string> = {
+  QB: "qb",
+  RB: "rb",
+  FB: "rb",
+  WR: "wr",
+  TE: "te",
+  K: "k",
+  P: "k",
+  "K/P": "k",
+  DL: "dl",
+  DE: "dl",
+  DT: "dl",
+  NT: "dl",
+  LB: "lb",
+  ILB: "lb",
+  OLB: "lb",
+  DB: "db",
+  CB: "db",
+  S: "db",
+  FS: "db",
+  SS: "db",
+};
+
+const POSITION_BADGE_STYLE: Record<string, string> = {
+  qb: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  rb: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+  wr: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+  te: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
+  k: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
+  dl: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
+  lb: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300",
+  db: "bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300",
+};
+
+const DEFAULT_POSITION_BADGE_STYLE = "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300";
+
+export function positionBadgeClasses(position: string | null): string {
+  if (!position) return DEFAULT_POSITION_BADGE_STYLE;
+  const group = POSITION_GROUP[position];
+  return group ? POSITION_BADGE_STYLE[group] : DEFAULT_POSITION_BADGE_STYLE;
+}

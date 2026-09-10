@@ -15,6 +15,30 @@ const TIMESLOT_ORDER = [
   "Bye / No Game",
 ];
 
+const POSITION_ORDER = ["QB", "RB", "WR", "TE", "DL", "LB", "DB", "DEF", "K", "P"];
+
+// IDP sub-positions and other variants collapse to their bucket for ordering.
+const POSITION_ORDER_ALIAS: Record<string, string> = {
+  FB: "RB",
+  DE: "DL",
+  DT: "DL",
+  NT: "DL",
+  ILB: "LB",
+  OLB: "LB",
+  CB: "DB",
+  S: "DB",
+  FS: "DB",
+  SS: "DB",
+  "K/P": "K",
+};
+
+function positionRank(position: string | null): number {
+  if (!position) return POSITION_ORDER.length;
+  const canonical = POSITION_ORDER_ALIAS[position] ?? position;
+  const idx = POSITION_ORDER.indexOf(canonical);
+  return idx === -1 ? POSITION_ORDER.length : idx;
+}
+
 interface RosterRow {
   id: number;
   league_id: number;
@@ -45,7 +69,6 @@ export interface DashboardPlayer {
   injuryStatus: string | null;
   opponent: string | null;
   kickoffIso: string | null;
-  sentiment: "for" | "against" | "mixed";
   // Weighted rooting score from -100 (root hard against — every league
   // weighs against you) to +100 (root hard for — every league weighs for
   // you), based on each league's importance weight.
@@ -53,12 +76,18 @@ export interface DashboardPlayer {
   leagues: DashboardLeagueRef[];
 }
 
+export interface DashboardTeamGroup {
+  // null groups players with no known team (e.g. a free agent).
+  team: string | null;
+  players: DashboardPlayer[];
+}
+
 export interface DashboardGame {
   // null for the "Bye / No Game" bucket, where there's no single game to
   // group by — everyone there just shares the timeslot.
   label: string | null;
   kickoffIso: string | null;
-  players: DashboardPlayer[];
+  teams: DashboardTeamGroup[];
 }
 
 export interface DashboardTimeslot {
@@ -116,8 +145,16 @@ export function buildDashboard(seasonYear: number, weekNumber: number): Dashboar
   }
 
   // Games nested within each timeslot, keyed by the two teams involved so
-  // both sides' rostered players land in the same group.
-  const timeslotGames = new Map<string, Map<string, DashboardGame>>();
+  // both sides' rostered players land in the same group; players within a
+  // game are further split out by which of the two teams they're on.
+  interface GameAccumulator {
+    label: string | null;
+    kickoffIso: string | null;
+    awayTeam: string | null;
+    homeTeam: string | null;
+    playersByTeam: Map<string | null, DashboardPlayer[]>;
+  }
+  const timeslotGames = new Map<string, Map<string, GameAccumulator>>();
   for (const name of TIMESLOT_ORDER) timeslotGames.set(name, new Map());
 
   for (const [playerId, info] of byPlayer.entries()) {
@@ -135,11 +172,6 @@ export function buildDashboard(seasonYear: number, weekNumber: number): Dashboar
     const totalWeight = mineWeight + oppWeight;
     const score = totalWeight === 0 ? 0 : Math.round(((mineWeight - oppWeight) / totalWeight) * 100);
 
-    let sentiment: "for" | "against" | "mixed";
-    if (score > 0) sentiment = "for";
-    else if (score < 0) sentiment = "against";
-    else sentiment = "mixed";
-
     const entry: DashboardPlayer = {
       playerId,
       name: info.name,
@@ -148,7 +180,6 @@ export function buildDashboard(seasonYear: number, weekNumber: number): Dashboar
       injuryStatus: info.injuryStatus,
       opponent: game ? game.opponent : null,
       kickoffIso: game ? game.kickoffIso : null,
-      sentiment,
       score,
       leagues: info.leagues,
     };
@@ -159,25 +190,60 @@ export function buildDashboard(seasonYear: number, weekNumber: number): Dashboar
     const gameKey = game ? [game.team, game.opponent].sort().join("-") : "bye";
     if (!gamesInSlot.has(gameKey)) {
       const label = game ? (game.isHome ? `${game.opponent} @ ${game.team}` : `${game.team} @ ${game.opponent}`) : null;
-      gamesInSlot.set(gameKey, { label, kickoffIso: game ? game.kickoffIso : null, players: [] });
+      const awayTeam = game ? (game.isHome ? game.opponent : game.team) : null;
+      const homeTeam = game ? (game.isHome ? game.team : game.opponent) : null;
+      gamesInSlot.set(gameKey, {
+        label,
+        kickoffIso: game ? game.kickoffIso : null,
+        awayTeam,
+        homeTeam,
+        playersByTeam: new Map(),
+      });
     }
-    gamesInSlot.get(gameKey)!.players.push(entry);
+    const acc = gamesInSlot.get(gameKey)!;
+    if (!acc.playersByTeam.has(entry.team)) acc.playersByTeam.set(entry.team, []);
+    acc.playersByTeam.get(entry.team)!.push(entry);
   }
 
   for (const gamesInSlot of timeslotGames.values()) {
     for (const g of gamesInSlot.values()) {
-      g.players.sort((a, b) => a.name.localeCompare(b.name));
+      for (const players of g.playersByTeam.values()) {
+        players.sort((a, b) => {
+          const rankDiff = positionRank(a.position) - positionRank(b.position);
+          return rankDiff !== 0 ? rankDiff : a.name.localeCompare(b.name);
+        });
+      }
     }
   }
 
   const timeslots: DashboardTimeslot[] = TIMESLOT_ORDER.filter((name) => (timeslotGames.get(name)?.size ?? 0) > 0).map(
     (name) => {
-      const games = [...timeslotGames.get(name)!.values()].sort((a, b) => {
-        if (a.kickoffIso && b.kickoffIso && a.kickoffIso !== b.kickoffIso) {
-          return a.kickoffIso.localeCompare(b.kickoffIso);
-        }
-        return (a.label ?? "").localeCompare(b.label ?? "");
-      });
+      const games: DashboardGame[] = [...timeslotGames.get(name)!.values()]
+        .sort((a, b) => {
+          if (a.kickoffIso && b.kickoffIso && a.kickoffIso !== b.kickoffIso) {
+            return a.kickoffIso.localeCompare(b.kickoffIso);
+          }
+          return (a.label ?? "").localeCompare(b.label ?? "");
+        })
+        .map((acc) => {
+          // Away team's group first, then home, matching the "AWAY @ HOME"
+          // label; any other team codes (mixed-team buckets like Bye) follow
+          // alphabetically, with no-team players last.
+          const priority = (team: string | null) => {
+            if (team === acc.awayTeam) return 0;
+            if (team === acc.homeTeam) return 1;
+            if (team === null) return 3;
+            return 2;
+          };
+          const teams: DashboardTeamGroup[] = [...acc.playersByTeam.entries()]
+            .map(([team, players]) => ({ team, players }))
+            .sort((a, b) => {
+              const p = priority(a.team) - priority(b.team);
+              if (p !== 0) return p;
+              return (a.team ?? "").localeCompare(b.team ?? "");
+            });
+          return { label: acc.label, kickoffIso: acc.kickoffIso, teams };
+        });
       return { name, games };
     }
   );

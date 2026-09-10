@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSeasonWeek } from "@/context/SeasonWeekContext";
-import { teamGlowStyle, playerImageUrl } from "@/lib/teamColors";
+import { teamGlowStyle, playerImageUrl, positionBadgeClasses, TEAM_COLORS } from "@/lib/teamColors";
 
 interface DashboardLeagueRef {
   leagueId: number;
@@ -21,15 +21,19 @@ interface DashboardPlayer {
   injuryStatus: string | null;
   opponent: string | null;
   kickoffIso: string | null;
-  sentiment: "for" | "against" | "mixed";
   score: number;
   leagues: DashboardLeagueRef[];
+}
+
+interface DashboardTeamGroup {
+  team: string | null;
+  players: DashboardPlayer[];
 }
 
 interface DashboardGame {
   label: string | null;
   kickoffIso: string | null;
-  players: DashboardPlayer[];
+  teams: DashboardTeamGroup[];
 }
 
 interface DashboardTimeslot {
@@ -37,21 +41,31 @@ interface DashboardTimeslot {
   games: DashboardGame[];
 }
 
-const SENTIMENT_STYLE: Record<DashboardPlayer["sentiment"], string> = {
-  for: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
-  against: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  mixed: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-};
-
-const SENTIMENT_LABEL: Record<DashboardPlayer["sentiment"], string> = {
-  for: "Root For",
-  against: "Root Against",
-  mixed: "Mixed",
-};
-
-function formatScore(score: number): string {
-  if (score > 0) return `+${score}`;
-  return `${score}`;
+// Rooting-score bands, shaded red (strongly against) through yellow (mixed)
+// to green (strongly for).
+function rootingTier(score: number): { label: string; className: string } {
+  if (score >= 66) {
+    return { label: "Root For", className: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" };
+  }
+  if (score >= 33) {
+    return {
+      label: "Mostly Root For",
+      className: "bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-300",
+    };
+  }
+  if (score >= -20) {
+    return { label: "Mixed", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300" };
+  }
+  if (score >= -50) {
+    return {
+      label: "Root Against",
+      className: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
+    };
+  }
+  return {
+    label: "Strongly Root Against",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  };
 }
 
 function splitName(name: string): [string, string | null] {
@@ -106,7 +120,8 @@ export default function DashboardPage() {
   }
 
   const totalPlayers = timeslots.reduce(
-    (sum, t) => sum + t.games.reduce((gsum, g) => gsum + g.players.length, 0),
+    (sum, t) =>
+      sum + t.games.reduce((gsum, g) => gsum + g.teams.reduce((tsum, tg) => tsum + tg.players.length, 0), 0),
     0
   );
 
@@ -168,65 +183,90 @@ export default function DashboardPage() {
                         {game.kickoffIso ? ` · ${formatKickoff(game.kickoffIso)}` : ""}
                       </h3>
                     )}
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                      {game.players.map((p) => (
-                        <div
-                          key={p.playerId}
-                          style={teamGlowStyle(p.team)}
-                          className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex min-w-0 items-start gap-2.5">
-                              {p.playerId && (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={playerImageUrl(p.playerId, p.position)}
-                                  alt=""
-                                  className="h-14 w-14 shrink-0 rounded-full bg-neutral-200 object-cover dark:bg-neutral-800"
-                                  onError={(e) => {
-                                    e.currentTarget.style.visibility = "hidden";
-                                  }}
-                                />
-                              )}
-                              <div className="min-w-0">
-                                <div>
-                                  {(() => {
-                                    const [first, last] = splitName(p.name);
-                                    return (
-                                      <>
-                                        <p className="player-name text-lg leading-none">{first}</p>
-                                        {last && (
-                                          <p className="player-name text-lg leading-none">{last}</p>
+                    <div className="space-y-3">
+                      {game.teams.map((teamGroup, ti) => (
+                        <div key={ti}>
+                          <h4
+                            className="mb-1 text-xs font-bold uppercase tracking-wide"
+                            style={{ color: teamGroup.team ? TEAM_COLORS[teamGroup.team] : undefined }}
+                          >
+                            {teamGroup.team ?? "No Team"}
+                          </h4>
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                            {teamGroup.players.map((p) => (
+                              <div
+                                key={p.playerId}
+                                style={teamGlowStyle(p.team)}
+                                className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex min-w-0 items-center gap-2.5">
+                                    {p.playerId && (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={playerImageUrl(p.playerId, p.position)}
+                                        alt=""
+                                        className="h-14 w-14 shrink-0 rounded-full bg-neutral-200 object-cover dark:bg-neutral-800"
+                                        onError={(e) => {
+                                          e.currentTarget.style.visibility = "hidden";
+                                        }}
+                                      />
+                                    )}
+                                    <div className="min-w-0">
+                                      <div>
+                                        {(() => {
+                                          const [first, last] = splitName(p.name);
+                                          return (
+                                            <>
+                                              <p className="player-name text-lg uppercase leading-none">
+                                                {first}
+                                              </p>
+                                              {last && (
+                                                <p className="player-name text-lg uppercase leading-none">
+                                                  {last}
+                                                </p>
+                                              )}
+                                            </>
+                                          );
+                                        })()}
+                                      </div>
+                                      <p className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-neutral-500">
+                                        {p.position && (
+                                          <span
+                                            className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${positionBadgeClasses(p.position)}`}
+                                          >
+                                            {p.position}
+                                          </span>
                                         )}
-                                      </>
-                                    );
-                                  })()}
+                                        <span>
+                                          {p.team}
+                                          {!game.label && p.opponent ? ` vs ${p.opponent}` : ""}
+                                          {p.injuryStatus ? ` · ${p.injuryStatus}` : ""}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span
+                                    className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${rootingTier(p.score).className}`}
+                                  >
+                                    {rootingTier(p.score).label}
+                                  </span>
                                 </div>
-                                <p className="mt-0.5 text-xs text-neutral-500">
-                                  {p.position} {p.team}
-                                  {!game.label && p.opponent ? ` vs ${p.opponent}` : ""}
-                                  {p.injuryStatus ? ` · ${p.injuryStatus}` : ""}
-                                </p>
+                                <ul className="mt-2 space-y-0.5">
+                                  {p.leagues.map((l, i) => (
+                                    <li key={i} className="text-xs text-neutral-500">
+                                      <span className={l.side === "mine" ? "text-green-600" : "text-red-600"}>
+                                        {l.side === "mine" ? "Your team" : "Opponent"}
+                                      </span>{" "}
+                                      in {l.leagueName}
+                                      {l.side === "opponent" && l.opponentLabel ? ` (${l.opponentLabel})` : ""}
+                                      <span className="text-neutral-400"> · weight {l.leagueWeight}</span>
+                                    </li>
+                                  ))}
+                                </ul>
                               </div>
-                            </div>
-                            <span
-                              className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${SENTIMENT_STYLE[p.sentiment]}`}
-                            >
-                              {SENTIMENT_LABEL[p.sentiment]} ({formatScore(p.score)})
-                            </span>
-                          </div>
-                          <ul className="mt-2 space-y-0.5">
-                            {p.leagues.map((l, i) => (
-                              <li key={i} className="text-xs text-neutral-500">
-                                <span className={l.side === "mine" ? "text-green-600" : "text-red-600"}>
-                                  {l.side === "mine" ? "Your team" : "Opponent"}
-                                </span>{" "}
-                                in {l.leagueName}
-                                {l.side === "opponent" && l.opponentLabel ? ` (${l.opponentLabel})` : ""}
-                                <span className="text-neutral-400"> · weight {l.leagueWeight}</span>
-                              </li>
                             ))}
-                          </ul>
+                          </div>
                         </div>
                       ))}
                     </div>
