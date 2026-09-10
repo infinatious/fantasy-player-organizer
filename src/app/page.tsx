@@ -54,6 +54,12 @@ function formatScore(score: number): string {
   return `${score}`;
 }
 
+function splitName(name: string): [string, string | null] {
+  const spaceIndex = name.indexOf(" ");
+  if (spaceIndex === -1) return [name, null];
+  return [name.slice(0, spaceIndex), name.slice(spaceIndex + 1)];
+}
+
 function formatKickoff(iso: string | null): string {
   if (!iso) return "";
   return new Date(iso).toLocaleString(undefined, {
@@ -183,8 +189,20 @@ export default function DashboardPage() {
                                 />
                               )}
                               <div className="min-w-0">
-                                <p className="player-name text-lg">{p.name}</p>
-                                <p className="text-xs text-neutral-500">
+                                <div>
+                                  {(() => {
+                                    const [first, last] = splitName(p.name);
+                                    return (
+                                      <>
+                                        <p className="player-name text-lg leading-none">{first}</p>
+                                        {last && (
+                                          <p className="player-name text-lg leading-none">{last}</p>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                                <p className="mt-0.5 text-xs text-neutral-500">
                                   {p.position} {p.team}
                                   {!game.label && p.opponent ? ` vs ${p.opponent}` : ""}
                                   {p.injuryStatus ? ` · ${p.injuryStatus}` : ""}
