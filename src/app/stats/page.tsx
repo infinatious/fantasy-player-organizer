@@ -33,6 +33,10 @@ interface PlayerAggRow {
   categoriesByLeague: Map<number, ZoneCategory>;
 }
 
+interface InjuryWatchRow extends PlayerAggRow {
+  startingLeagueIds: number[];
+}
+
 interface ConflictRow {
   key: string;
   player: DepthChartPlayer;
@@ -130,7 +134,7 @@ export default function StatsPage() {
   const [conflictPlayers, setConflictPlayers] = useState<ConflictRow[]>([]);
   const [teamStacking, setTeamStacking] = useState<[string, number][]>([]);
   const [positionBreakdown, setPositionBreakdown] = useState<[string, number][]>([]);
-  const [injuryWatch, setInjuryWatch] = useState<PlayerAggRow[]>([]);
+  const [injuryWatch, setInjuryWatch] = useState<InjuryWatchRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [onlySerious, setOnlySerious] = useState(false);
   const [resultsModalOpen, setResultsModalOpen] = useState(false);
@@ -190,7 +194,16 @@ export default function StatsPage() {
       setInjuryWatch(
         allRows
           .filter((r) => r.player.injuryStatus)
+          .map((r) => ({
+            ...r,
+            startingLeagueIds: [...r.categoriesByLeague.entries()]
+              .filter(([, c]) => c === "starter")
+              .map(([id]) => id),
+          }))
           .sort((a, b) => {
+            const aStarting = a.startingLeagueIds.length > 0;
+            const bStarting = b.startingLeagueIds.length > 0;
+            if (aStarting !== bStarting) return aStarting ? -1 : 1;
             const aSevere = SEVERE_INJURY_STATUSES.has((a.player.injuryStatus ?? "").toUpperCase());
             const bSevere = SEVERE_INJURY_STATUSES.has((b.player.injuryStatus ?? "").toUpperCase());
             if (aSevere !== bSevere) return aSevere ? -1 : 1;
@@ -441,25 +454,41 @@ export default function StatsPage() {
           <p className="text-sm text-neutral-500">No rostered players are currently flagged with an injury status.</p>
         ) : (
           <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900">
-            {injuryWatch.map((r) => (
-              <li key={r.key} className="flex items-center gap-3 px-4 py-2.5">
-                <RosterAvatar player={r.player} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium leading-tight">{r.player.name}</p>
-                  <p className="mt-0.5 flex items-center gap-1.5">
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${positionBadgeClasses(r.player.position)}`}
-                    >
-                      {r.player.position}
-                    </span>
-                    {r.player.team && <span className="text-xs text-neutral-500">{r.player.team}</span>}
-                  </p>
-                </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${injuryBadgeClasses(r.player.injuryStatus!)}`}>
-                  {r.player.injuryStatus}
-                </span>
-              </li>
-            ))}
+            {injuryWatch.map((r) => {
+              const isStarting = r.startingLeagueIds.length > 0;
+              return (
+                <li
+                  key={r.key}
+                  className={`flex items-center gap-3 border-l-4 px-4 py-2.5 ${
+                    isStarting
+                      ? "border-l-amber-500 bg-amber-50 dark:bg-amber-900/10"
+                      : "border-l-transparent"
+                  }`}
+                >
+                  <RosterAvatar player={r.player} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium leading-tight">{r.player.name}</p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${positionBadgeClasses(r.player.position)}`}
+                      >
+                        {r.player.position}
+                      </span>
+                      {r.player.team && <span className="text-xs text-neutral-500">{r.player.team}</span>}
+                      {isStarting && (
+                        <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-500/20 dark:text-amber-300">
+                          Starting in {r.startingLeagueIds.length}{" "}
+                          {r.startingLeagueIds.length === 1 ? "league" : "leagues"}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${injuryBadgeClasses(r.player.injuryStatus!)}`}>
+                    {r.player.injuryStatus}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
