@@ -23,7 +23,9 @@ function starterPosition(zone: string): string {
 
 function sortedStarters(players: DepthChartPlayer[]): DepthChartPlayer[] {
   return players
-    .filter((p) => p.zone.startsWith("starter-"))
+    // Team defenses render as a team logo, not a headshot — out of place
+    // among the actual player photos in this row.
+    .filter((p) => p.zone.startsWith("starter-") && p.position !== "DEF")
     .sort((a, b) => {
       const posA = STARTER_ORDER.indexOf(starterPosition(a.zone));
       const posB = STARTER_ORDER.indexOf(starterPosition(b.zone));
