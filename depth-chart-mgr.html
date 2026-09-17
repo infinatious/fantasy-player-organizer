@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fantasy Depth Chart Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
+<link href="depth-chart-mgr_files/css2_cLKp.css" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#040814;
+    --bg-1:#081332;
+    --bg-2:#0d1b45;
+    --panel:#0f1c47;
+    --panel-2:rgba(255,255,255,0.045);
+    --border:rgba(255,255,255,0.09);
+    --text:#eaf0ff;
+    --text-dim:#8fa0c9;
+    --accent:#4cc9f0;
+    --accent-2:#6d8cff;
+    --qb:#ef476f;
+    --rb:#2ecf87;
+    --wr:#3a86ff;
+    --te:#ff9f45;
+    --k:#a56bf5;
+    --dl:#9aa5b1;
+    --lb:#14c8c8;
+    --db:#ec4899;
+    --taxi:#f4d35e;
+    --danger:#ff5566;
+    --radius:14px;
+    --shadow: 0 10px 30px rgba(0,0,0,0.35);
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    color:var(--text);
+    min-height:100vh;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, #14224f 0%, transparent 60%),
+      radial-gradient(1000px 500px at 100% 0%, #0f1e4a 0%, transparent 55%),
+      linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 45%, var(--bg-0) 100%);
+    background-attachment:fixed;
+  }
+  .app{max-width:1600px;margin:0 auto;padding:20px 24px 60px;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    position:sticky;top:0;z-index:50;
+    display:flex;align-items:center;justify-content:space-between;
+    gap:16px;flex-wrap:wrap;
+    padding:16px 4px;
+    backdrop-filter: blur(10px);
+    background:linear-gradient(180deg, rgba(4,8,20,0.92), rgba(4,8,20,0.55));
+    margin:0 -4px 18px;
+    border-bottom:1px solid var(--border);
+  }
+  .brand{font-size:20px;font-weight:800;letter-spacing:0.2px;display:flex;align-items:center;gap:10px;}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 0 12px var(--accent);}
+  .header-actions{display:flex;gap:10px;flex-wrap:wrap;}
+
+  .btn{
+    font-family:inherit;font-size:13.5px;font-weight:600;
+    border:1px solid var(--border);
+    background:var(--panel-2);
+    color:var(--text);
+    padding:9px 16px;border-radius:10px;cursor:pointer;
+    transition:transform .12s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+    white-space:nowrap;
+  }
+  .btn:hover{transform:translateY(-1px);background:rgba(255,255,255,0.09);}
+  .btn:active{transform:translateY(0);}
+  .btn.primary{background:linear-gradient(135deg,var(--accent-2),var(--accent));border-color:transparent;color:#031024;box-shadow:0 6px 18px rgba(76,201,240,0.25);}
+  .btn.primary:hover{box-shadow:0 8px 22px rgba(76,201,240,0.4);}
+  .btn.ghost{background:transparent;}
+  .btn.danger-ghost{background:transparent;border-color:rgba(255,85,102,0.4);color:#ff8b96;}
+  .btn.danger-ghost:hover{background:rgba(255,85,102,0.12);}
+  .file-btn{display:inline-flex;align-items:center;}
+
+  /* ---------- Settings panel ---------- */
+  .settings-panel{
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:18px 20px;margin-bottom:26px;box-shadow:var(--shadow);
+  }
+  .settings-header{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    cursor:pointer;user-select:none;
+  }
+  .settings-header h3{margin:0;font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);font-weight:700;}
+  .settings-header .chevron{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:26px;height:26px;border-radius:8px;border:1px solid var(--border);
+    color:var(--text-dim);font-size:12px;transition:transform .2s ease, background .15s ease;
+    flex-shrink:0;
+  }
+  .settings-header:hover .chevron{background:rgba(255,255,255,0.08);color:var(--text);}
+  .settings-panel.collapsed .chevron{transform:rotate(-90deg);}
+  .settings-body{margin-top:16px;}
+  .settings-panel.collapsed .settings-body{display:none;}
+  .settings-panel h4{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);font-weight:700;}
+  .settings-panel h4.sub{margin-top:18px;}
+  .settings-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:14px;margin-bottom:16px;
+  }
+  .settings-grid label{
+    display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--text-dim);font-weight:600;
+  }
+  .settings-grid input{
+    font-family:inherit;font-size:15px;font-weight:700;color:var(--text);
+    background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:9px;
+    padding:8px 10px;width:100%;
+  }
+  .settings-grid input:focus{outline:none;border-color:var(--accent);}
+
+  /* ---------- Section headers ---------- */
+  .section-title{
+    display:flex;align-items:baseline;gap:10px;font-size:17px;font-weight:700;margin:0 0 14px;flex-wrap:wrap;
+  }
+  .section-title .hint{font-size:12px;font-weight:500;color:var(--text-dim);}
+  .count-badge{
+    font-size:11.5px;font-weight:700;color:var(--text-dim);
+    background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:20px;padding:2px 10px;
+    transition:background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .count-badge.over{
+    color:#ffffff;border-color:var(--danger);background:var(--danger);
+    box-shadow:0 0 0 1px rgba(255,85,102,0.35), 0 0 10px rgba(255,85,102,0.45);
+    font-weight:800;
+  }
+
+  /* ---------- Roster grid (starters + bench per position) ---------- */
+  .starters-section{margin-bottom:32px;}
+  .group-heading{
+    font-size:11.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-dim);
+    margin:22px 0 10px;display:flex;align-items:center;gap:10px;
+    grid-column:1 / -1;
+  }
+  .group-heading::after{
+    content:"";flex:1;height:1px;background:var(--border);
+  }
+  .starters-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;
+    align-items:start;
+  }
+  .starter-column{
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:14px;display:flex;flex-direction:column;gap:10px;
+  }
+  .starter-column .col-head{
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .col-head .pos-label{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px;letter-spacing:0.5px;}
+  .pos-chip{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:30px;height:22px;padding:0 7px;border-radius:6px;font-size:11px;font-weight:800;color:#0a0f1f;
+  }
+  .pos-chip.QB{background:var(--qb);color:#fff;}
+  .pos-chip.RB{background:var(--rb);color:#04231a;}
+  .pos-chip.WR{background:var(--wr);color:#fff;}
+  .pos-chip.TE{background:var(--te);color:#241100;}
+  .pos-chip.K{background:var(--k);color:#fff;}
+  .pos-chip.DL{background:var(--dl);color:#111827;}
+  .pos-chip.LB{background:var(--lb);color:#04201f;}
+  .pos-chip.DB{background:var(--db);color:#2b0016;}
+  .pos-chip.FLEX{background:linear-gradient(135deg,var(--rb),var(--wr),var(--te));color:#06111f;}
+  .pos-chip.IDPFLEX{background:linear-gradient(135deg,var(--dl),var(--lb),var(--db));color:#06111f;}
+
+  .subsection-divider{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-top:2px;padding-top:10px;border-top:1px dashed var(--border);
+  }
+  .subsection-divider .subtitle{
+    font-size:11px;font-weight:800;letter-spacing:0.8px;text-transform:uppercase;color:var(--text-dim);
+  }
+  .flex-hint{
+    font-size:11.5px;color:var(--text-dim);font-style:italic;line-height:1.4;
+    padding-top:8px;border-top:1px dashed var(--border);
+  }
+
+  /* ---------- Lower grid (IR / taxi / cut) ---------- */
+  .lower-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px;
+  }
+  .column-block{display:flex;flex-direction:column;}
+
+  /* ---------- Drop zones ---------- */
+  .dropzone{
+    min-height:130px;border:1.5px dashed var(--border);border-radius:12px;
+    padding:10px;display:flex;flex-direction:column;gap:8px;
+    background:rgba(255,255,255,0.02);
+    transition:background .15s ease, border-color .15s ease;
+    flex:1;
+  }
+  .dropzone.bench-slot{
+    min-height:60px;
+  }
+  .dropzone.zone-hover{
+    border-color:var(--accent);background:rgba(76,201,240,0.08);
+  }
+  .dropzone:empty::before{
+    content:"Drop players here";
+    display:block;text-align:center;color:var(--text-dim);font-size:12.5px;
+    padding:30px 8px;font-weight:500;
+  }
+  .dropzone.bench-slot:empty::before{
+    content:"Empty";
+    padding:12px 8px;font-size:11.5px;
+  }
+  .cut-zone{border-color:rgba(255,85,102,0.35);}
+  .cut-zone.zone-hover{border-color:var(--danger);background:rgba(255,85,102,0.08);}
+  .taxi-zone{border-color:rgba(244,211,94,0.35);}
+  .taxi-zone.zone-hover{border-color:var(--taxi);background:rgba(244,211,94,0.08);}
+
+  /* ---------- Player card ---------- */
+  .player-card{
+    background:rgba(255,255,255,0.055);
+    border:1px solid var(--border);
+    border-left:4px solid var(--accent);
+    border-radius:10px;
+    padding:9px 10px;
+    cursor:grab;
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    transition:transform .12s ease, box-shadow .12s ease, opacity .15s ease;
+    user-select:none;
+  }
+  .player-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,0.35);}
+  .player-card.dragging{opacity:0.35;cursor:grabbing;transform:scale(0.98) rotate(1deg);}
+  .player-card.QB{border-left-color:var(--qb);}
+  .player-card.RB{border-left-color:var(--rb);}
+  .player-card.WR{border-left-color:var(--wr);}
+  .player-card.TE{border-left-color:var(--te);}
+  .player-card.K{border-left-color:var(--k);}
+  .player-card.DL{border-left-color:var(--dl);}
+  .player-card.LB{border-left-color:var(--lb);}
+  .player-card.DB{border-left-color:var(--db);}
+
+  .card-info{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .card-name{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .card-meta{font-size:11px;color:var(--text-dim);display:flex;gap:6px;align-items:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .card-meta .pos-chip{height:16px;min-width:22px;font-size:9.5px;padding:0 5px;}
+
+  .card-actions{display:flex;gap:4px;flex-shrink:0;}
+  .icon-btn{
+    background:transparent;border:none;color:var(--text-dim);cursor:pointer;
+    font-size:13px;padding:3px 5px;border-radius:6px;line-height:1;
+    transition:background .12s ease, color .12s ease;
+  }
+  .icon-btn:hover{background:rgba(255,255,255,0.1);color:var(--text);}
+  .icon-btn.del:hover{color:var(--danger);background:rgba(255,85,102,0.14);}
+  .icon-btn.editbtn:hover{color:var(--accent);background:rgba(76,201,240,0.14);}
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(2,5,15,0.65);backdrop-filter:blur(4px);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:16px;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    background:var(--panel);border:1px solid var(--border);border-radius:16px;
+    padding:24px;width:100%;max-width:400px;box-shadow:var(--shadow);
+    max-height:90vh;overflow-y:auto;
+  }
+  .modal h3{margin:0 0 16px;font-size:17px;font-weight:800;}
+  .modal label{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--text-dim);font-weight:600;margin-bottom:14px;}
+  .modal input, .modal select{
+    font-family:inherit;font-size:14px;color:var(--text);background:rgba(255,255,255,0.05);
+    border:1px solid var(--border);border-radius:9px;padding:9px 11px;
+  }
+  .modal input:focus, .modal select:focus{outline:none;border-color:var(--accent);}
+  .modal select option{background:#0d1b45;color:var(--text);}
+  .modal select optgroup{background:#0d1b45;color:var(--text-dim);font-style:normal;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px;flex-wrap:wrap;}
+
+  /* ---------- Toast ---------- */
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:#101f4d;border:1px solid var(--border);color:var(--text);
+    padding:11px 18px;border-radius:10px;font-size:13px;font-weight:600;
+    box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .2s ease, transform .2s ease;
+    z-index:200;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media (max-width:900px){
+    .lower-grid{grid-template-columns:1fr;}
+  }
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:#1a2a5e;border-radius:10px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span>Fantasy Depth Chart Manager</div>
+    <div class="header-actions">
+      <button class="btn primary" id="btnAddPlayer">+ Add Player</button>
+      <button class="btn ghost" id="btnSampleData">Load Sample Roster</button>
+      <button class="btn ghost" id="btnExport">Export JSON</button>
+      <label class="btn ghost file-btn">Import JSON<input type="file" id="importFile" accept="application/json" hidden=""></label>
+      <button class="btn danger-ghost" id="btnReset">Reset All</button>
+    </div>
+  </div>
+
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-header" id="settingsHeader">
+      <h3>League Roster Settings</h3>
+      <span class="chevron" id="settingsChevron">▾</span>
+    </div>
+    <div class="settings-body" id="settingsBody">
+      <h4>Offense Starters</h4>
+      <div class="settings-grid">
+        <label>QB Starters<input type="number" id="cfg-QB" min="0" max="10" value="2"></label>
+        <label>RB Starters<input type="number" id="cfg-RB" min="0" max="10" value="2"></label>
+        <label>WR Starters<input type="number" id="cfg-WR" min="0" max="10" value="2"></label>
+        <label>TE Starters<input type="number" id="cfg-TE" min="0" max="10" value="1"></label>
+        <label>FLEX Starters<input type="number" id="cfg-FLEX" min="0" max="10" value="2"></label>
+        <label>K Starters<input type="number" id="cfg-K" min="0" max="10" value="0"></label>
+      </div>
+      <h4 class="sub">IDP Starters (Individual Defensive Players)</h4>
+      <div class="settings-grid">
+        <label>DL Starters<input type="number" id="cfg-DL" min="0" max="10" value="0"></label>
+        <label>LB Starters<input type="number" id="cfg-LB" min="0" max="10" value="0"></label>
+        <label>DB Starters<input type="number" id="cfg-DB" min="0" max="10" value="0"></label>
+        <label>IDP FLEX Starters<input type="number" id="cfg-IDPFLEX" min="0" max="10" value="0"></label>
+      </div>
+      <h4 class="sub">Reserves</h4>
+      <div class="settings-grid">
+        <label>Bench Spots<input type="number" id="cfg-BENCH" min="0" max="40" value="12"></label>
+        <label>IR Spots<input type="number" id="cfg-IR" min="0" max="10" value="4"></label>
+        <label>Taxi Squad Spots<input type="number" id="cfg-TAXI" min="0" max="10" value="4"></label>
+      </div>
+      <button class="btn primary" id="btnApplySettings">Apply Settings</button>
+    </div>
+  </div>
+
+  <div class="starters-section">
+    <h2 class="section-title">
+      Roster
+      <span class="hint">Starters on top, backups and stashes organized below by position</span>
+      <span class="count-badge" id="badge-bench-total">Bench 11/12</span>
+    </h2>
+    <div class="starters-grid" id="startersGrid"><div class="group-heading">Offense</div><div class="starter-column"><div class="col-head"><div class="pos-label"><span class="pos-chip QB">QB</span>Quarterback</div><span class="count-badge" id="badge-starter-QB">2/2</span></div><div class="dropzone" id="zone-starter-QB" data-zone="starter-QB"><div class="player-card QB" data-id="p_msichl6n_4jp3h6" draggable="true"><div class="card-info"><div class="card-name">Drake Maye</div><div class="card-meta"><span class="pos-chip QB">QB</span><span>Patriots</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card QB" data-id="p_msiciyyu_lto2n6" draggable="true"><div class="card-info"><div class="card-name">Sam Darnold</div><div class="card-meta"><span class="pos-chip QB">QB</span><span>Seahawks</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div><div class="subsection-divider"><span class="subtitle">Backups</span><span class="count-badge" id="badge-backup-QB">0</span></div><div class="dropzone bench-slot" id="zone-backup-QB" data-zone="backup-QB"></div><div class="subsection-divider"><span class="subtitle">Stashes</span><span class="count-badge" id="badge-stash-QB">1</span></div><div class="dropzone bench-slot" id="zone-stash-QB" data-zone="stash-QB"><div class="player-card QB" data-id="p_msicly26_gnfh6h" draggable="true"><div class="card-info"><div class="card-name">Will Howard</div><div class="card-meta"><span class="pos-chip QB">QB</span><span>PIT</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div></div><div class="starter-column"><div class="col-head"><div class="pos-label"><span class="pos-chip RB">RB</span>Running Back</div><span class="count-badge" id="badge-starter-RB">2/2</span></div><div class="dropzone" id="zone-starter-RB" data-zone="starter-RB"><div class="player-card RB" data-id="p_msichrow_6xb3ku" draggable="true"><div class="card-info"><div class="card-name">James Cook</div><div class="card-meta"><span class="pos-chip RB">RB</span><span>Bills</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card RB" data-id="p_msicius3_c9hwe1" draggable="true"><div class="card-info"><div class="card-name">Christian McCaffrey</div><div class="card-meta"><span class="pos-chip RB">RB</span><span>49ers</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div><div class="subsection-divider"><span class="subtitle">Backups</span><span class="count-badge" id="badge-backup-RB">4</span></div><div class="dropzone bench-slot" id="zone-backup-RB" data-zone="backup-RB"><div class="player-card RB" data-id="p_msichz7o_2xp27m" draggable="true"><div class="card-info"><div class="card-name">J. Croskey-Merritt</div><div class="card-meta"><span class="pos-chip RB">RB</span><span>Washington</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card RB" data-id="p_msicl9mp_2yj95v" draggable="true"><div class="card-info"><div class="card-name">Chris Rodriguez</div><div class="card-meta"><span class="pos-chip RB">RB</span><span>JAX</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card RB" data-id="p_msicli13_k6qzfu" draggable="true"><div class="card-info"><div class="card-name">Jaydon Blue</div><div class="card-meta"><span class="pos-chip RB">RB</span><span>Cowboys</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card RB" data-id="p_msicln95_a84hn4" draggable="true"><div class="card-info"><div class="card-name">Jordan Mason</div><div class="card-meta"><span class="pos-chip RB">RB</span><span>MIN</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div><div class="subsection-divider"><span class="subtitle">Stashes</span><span class="count-badge" id="badge-stash-RB">0</span></div><div class="dropzone bench-slot" id="zone-stash-RB" data-zone="stash-RB"></div></div><div class="starter-column"><div class="col-head"><div class="pos-label"><span class="pos-chip WR">WR</span>Wide Receiver</div><span class="count-badge" id="badge-starter-WR">2/2</span></div><div class="dropzone" id="zone-starter-WR" data-zone="starter-WR"><div class="player-card WR" data-id="p_msici7pk_6mfw38" draggable="true"><div class="card-info"><div class="card-name">Ja'Marr Chase</div><div class="card-meta"><span class="pos-chip WR">WR</span><span>Bengals</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card WR" data-id="p_msicickw_nytbxh" draggable="true"><div class="card-info"><div class="card-name">Zay Flowers</div><div class="card-meta"><span class="pos-chip WR">WR</span><span>Ravens</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div><div class="subsection-divider"><span class="subtitle">Backups</span><span class="count-badge" id="badge-backup-WR">4</span></div><div class="dropzone bench-slot" id="zone-backup-WR" data-zone="backup-WR"><div class="player-card WR" data-id="p_msick2n0_n8unku" draggable="true"><div class="card-info"><div class="card-name">Matthew Golden</div><div class="card-meta"><span class="pos-chip WR">WR</span><span>Packers</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card WR" data-id="p_msickheu_lch4oo" draggable="true"><div class="card-info"><div class="card-name">Josh Downs</div><div class="card-meta"><span class="pos-chip WR">WR</span><span>Colts</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card WR" data-id="p_msicjw77_4332cd" draggable="true"><div class="card-info"><div class="card-name">Jalen McMillan</div><div class="card-meta"><span class="pos-chip WR">WR</span><span>Tampa</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card WR" data-id="p_msickdhd_xflpav" draggable="true"><div class="card-info"><div class="card-name">Rashid Shaheed</div><div class="card-meta"><span class="pos-chip WR">WR</span><span>Seattle</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div><div class="subsection-divider"><span class="subtitle">Stashes</span><span class="count-badge" id="badge-stash-WR">1</span></div><div class="dropzone bench-slot" id="zone-stash-WR" data-zone="stash-WR"><div class="player-card WR" data-id="p_mt8hu8l8_hkhjss" draggable="true"><div class="card-info"><div class="card-name">Pat Bryant</div><div class="card-meta"><span class="pos-chip WR">WR</span><span>DEN</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div></div><div class="starter-column"><div class="col-head"><div class="pos-label"><span class="pos-chip TE">TE</span>Tight End</div><span class="count-badge" id="badge-starter-TE">1/1</span></div><div class="dropzone" id="zone-starter-TE" data-zone="starter-TE"><div class="player-card TE" data-id="p_msicij3t_8q3mln" draggable="true"><div class="card-info"><div class="card-name">Trey McBride</div><div class="card-meta"><span class="pos-chip TE">TE</span><span>AZ</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div><div class="subsection-divider"><span class="subtitle">Backups</span><span class="count-badge" id="badge-backup-TE">0</span></div><div class="dropzone bench-slot" id="zone-backup-TE" data-zone="backup-TE"></div><div class="subsection-divider"><span class="subtitle">Stashes</span><span class="count-badge" id="badge-stash-TE">1</span></div><div class="dropzone bench-slot" id="zone-stash-TE" data-zone="stash-TE"><div class="player-card TE" data-id="p_msicko5h_xjckmj" draggable="true"><div class="card-info"><div class="card-name">Ja'Tavion Sanders</div><div class="card-meta"><span class="pos-chip TE">TE</span><span>Carolina</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div></div><div class="starter-column"><div class="col-head"><div class="pos-label"><span class="pos-chip FLEX">FLEX</span>FLEX (RB/WR/TE)</div><span class="count-badge" id="badge-starter-FLEX">2/2</span></div><div class="dropzone" id="zone-starter-FLEX" data-zone="starter-FLEX"><div class="player-card WR" data-id="p_msicip90_xnf3p7" draggable="true"><div class="card-info"><div class="card-name">Christian Watson</div><div class="card-meta"><span class="pos-chip WR">WR</span><span>GB</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card TE" data-id="p_msicls2t_nepni1" draggable="true"><div class="card-info"><div class="card-name">Tucker Kraft</div><div class="card-meta"><span class="pos-chip TE">TE</span><span>Packers</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div><div class="flex-hint">Flex accepts RB / WR / TE — drag eligible players from their backup/stash sections.</div></div></div>
+  </div>
+
+  <div class="lower-grid">
+    <div class="column-block">
+      <h2 class="section-title">Injured Reserve <span class="count-badge" id="badge-ir">2/4</span></h2>
+      <div class="dropzone" id="zone-ir" data-zone="ir"><div class="player-card TE" data-id="p_msicl11v_fxgva1" draggable="true"><div class="card-info"><div class="card-name">Luke Musgrave</div><div class="card-meta"><span class="pos-chip TE">TE</span><span>Packers</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card RB" data-id="p_mtaeqcc8_n8lujo" draggable="true"><div class="card-info"><div class="card-name">Trey Benson</div><div class="card-meta"><span class="pos-chip RB">RB</span><span>AZ</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div>
+    </div>
+    <div class="column-block">
+      <h2 class="section-title">Taxi Squad <span class="count-badge" id="badge-taxi">4/4</span></h2>
+      <div class="dropzone taxi-zone" id="zone-taxi" data-zone="taxi"><div class="player-card WR" data-id="p_mt6icqyl_10fm6b" draggable="true"><div class="card-info"><div class="card-name">Denzel Boston</div><div class="card-meta"><span class="pos-chip WR">WR</span><span>CLE</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card TE" data-id="p_mt6jctme_0sb1f2" draggable="true"><div class="card-info"><div class="card-name">Oscar Delp</div><div class="card-meta"><span class="pos-chip TE">TE</span><span>Saints</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card QB" data-id="p_mt7elwkc_egz92n" draggable="true"><div class="card-info"><div class="card-name">Garrett Nussmeier</div><div class="card-meta"><span class="pos-chip QB">QB</span><span>KC</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card WR" data-id="p_mt8htzy9_5pr2n7" draggable="true"><div class="card-info"><div class="card-name">Bryce Lance</div><div class="card-meta"><span class="pos-chip WR">WR</span><span>NO</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div>
+    </div>
+    <div class="column-block">
+      <h2 class="section-title">Cut / Trade Block <span class="count-badge">∞</span></h2>
+      <div class="dropzone cut-zone" id="zone-cut" data-zone="cut"><div class="player-card RB" data-id="p_msicjk47_qtvwk8" draggable="true"><div class="card-info"><div class="card-name">Isaiah Davis</div><div class="card-meta"><span class="pos-chip RB">RB</span><span>Jets</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div><div class="player-card QB" data-id="p_msicjbyk_gtb4ah" draggable="true"><div class="card-info"><div class="card-name">Spencer Rattler</div><div class="card-meta"><span class="pos-chip QB">QB</span><span>New Orleans</span></div></div><div class="card-actions"><button class="icon-btn editbtn" title="Edit player">✎</button><button class="icon-btn del" title="Delete player">✕</button></div></div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Add Player</h3>
+    <form id="addPlayerForm">
+      <label>Name
+        <input id="inpName" type="text" placeholder="e.g. Justin Jefferson" autocomplete="off">
+      </label>
+      <label>Position
+        <select id="inpPosition">
+          <optgroup label="Offense">
+            <option value="QB" selected="selected">QB — Quarterback</option>
+            <option value="RB">RB — Running Back</option>
+            <option value="WR">WR — Wide Receiver</option>
+            <option value="TE">TE — Tight End</option>
+            <option value="K">K — Kicker</option>
+          </optgroup>
+          <optgroup label="IDP">
+            <option value="DL">DL — Defensive Line</option>
+            <option value="LB">LB — Linebacker</option>
+            <option value="DB">DB — Defensive Back</option>
+          </optgroup>
+        </select>
+      </label>
+      <label>Add To
+        <select id="inpDestination"></select>
+      </label>
+      <label>NFL Team (optional)
+        <input id="inpTeam" type="text" placeholder="e.g. MIN" autocomplete="off">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="btnCancelAdd">Cancel</button>
+        <button type="submit" class="btn ghost" id="btnSaveAddAnother" data-action="stay">Save &amp; Add Another</button>
+        <button type="submit" class="btn primary" id="btnConfirmAdd" data-action="close">Add Player</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  const STORAGE_KEY = "fantasyDepthChartState_v4";
+  const LEGACY_KEYS = ["fantasyDepthChartState_v3","fantasyDepthChartState_v2","fantasyDepthChartState_v1"];
+  const OFFENSE_POSITIONS = ["QB","RB","WR","TE","K"];
+  const IDP_POSITIONS = ["DL","LB","DB"];
+  const POSITIONS = OFFENSE_POSITIONS.concat(IDP_POSITIONS);
+  const STARTER_ORDER = ["QB","RB","WR","TE","FLEX","K","DL","LB","DB","IDPFLEX"];
+  const FLEX_TYPES = ["FLEX","IDPFLEX"];
+  const RESERVE_KINDS = ["backup","stash"];
+
+  const ACCEPT = {};
+  STARTER_ORDER.forEach(pos=>{
+    if(pos === 'FLEX') ACCEPT['starter-FLEX'] = ["RB","WR","TE"];
+    else if(pos === 'IDPFLEX') ACCEPT['starter-IDPFLEX'] = ["DL","LB","DB"];
+    else ACCEPT['starter-' + pos] = [pos];
+  });
+  POSITIONS.forEach(pos=>{
+    ACCEPT['backup-' + pos] = [pos];
+    ACCEPT['stash-' + pos] = [pos];
+  });
+  ACCEPT['ir'] = POSITIONS;
+  ACCEPT['taxi'] = POSITIONS;
+  ACCEPT['cut'] = POSITIONS;
+
+  const DEFAULT_SETTINGS = { QB:1, RB:2, WR:2, TE:1, FLEX:1, K:1, DL:1, LB:1, DB:1, IDPFLEX:1, BENCH:6, IR:2, TAXI:3 };
+
+  let state = {
+    settings: Object.assign({}, DEFAULT_SETTINGS),
+    players: []
+  };
+
+  let editingPlayerId = null;
+
+  function uid(){
+    return 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+  }
+
+  function migrateState(){
+    if(state.settings.DL === undefined) state.settings.DL = DEFAULT_SETTINGS.DL;
+    if(state.settings.LB === undefined) state.settings.LB = DEFAULT_SETTINGS.LB;
+    if(state.settings.DB === undefined) state.settings.DB = DEFAULT_SETTINGS.DB;
+    if(state.settings.IDPFLEX === undefined) state.settings.IDPFLEX = DEFAULT_SETTINGS.IDPFLEX;
+    if(state.settings.TAXI === undefined) state.settings.TAXI = DEFAULT_SETTINGS.TAXI;
+
+    if(state.settings.BENCH === undefined){
+      const backup = state.settings.BACKUP !== undefined ? state.settings.BACKUP : 0;
+      const stash = state.settings.STASH !== undefined ? state.settings.STASH : 0;
+      state.settings.BENCH = (backup + stash) || DEFAULT_SETTINGS.BENCH;
+    }
+    delete state.settings.BACKUP;
+    delete state.settings.STASH;
+
+    state.players.forEach(p=>{
+      if(p.zone === 'bench'){
+        p.zone = 'backup-' + p.position;
+      } else if(p.zone && p.zone.startsWith('bench-')){
+        p.zone = 'backup-' + p.zone.slice('bench-'.length);
+      }
+      if(p.notes !== undefined) delete p.notes;
+    });
+  }
+
+  function save(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+  }
+
+  function load(){
+    try{
+      let raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw){
+        for(const key of LEGACY_KEYS){
+          raw = localStorage.getItem(key);
+          if(raw) break;
+        }
+      }
+      if(raw){
+        const parsed = JSON.parse(raw);
+        if(parsed && parsed.settings && Array.isArray(parsed.players)){
+          state = parsed;
+          migrateState();
+        }
+      }
+    }catch(e){}
+  }
+
+  function toast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._tm);
+    toast._tm = setTimeout(()=> t.classList.remove('show'), 2200);
+  }
+
+  function getStarterCapacity(zone){
+    const pos = zone.split('-')[1];
+    return state.settings[pos] || 0;
+  }
+
+  function positionAllowedInZone(zone, position){
+    return (ACCEPT[zone] || []).includes(position);
+  }
+
+  function playersInZone(zone){
+    return state.players.filter(p => p.zone === zone).sort((a,b)=>a.order-b.order);
+  }
+
+  function totalBenchCount(){
+    return state.players.filter(p => p.zone && (p.zone.startsWith('backup-') || p.zone.startsWith('stash-'))).length;
+  }
+
+  function syncOrderFromDOM(container){
+    const zone = container.dataset.zone;
+    [...container.children].forEach((el, idx)=>{
+      const p = state.players.find(pl => pl.id === el.dataset.id);
+      if(p){ p.zone = zone; p.order = idx; }
+    });
+  }
+
+  // ---------- Drag & drop ----------
+  let dragCtx = null; // {el, parent, next, playerId}
+  let dropHandled = false;
+
+  function getDragAfterElement(container, y){
+    const els = [...container.querySelectorAll('.player-card:not(.dragging)')];
+    return els.reduce((closest, child)=>{
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height/2;
+      if(offset < 0 && offset > closest.offset){
+        return { offset, element: child };
+      }
+      return closest;
+    }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+  }
+
+  function attachZoneEvents(zoneEl){
+    zoneEl.addEventListener('dragover', e=>{
+      e.preventDefault();
+      const dragEl = document.querySelector('.player-card.dragging');
+      if(!dragEl) return;
+      zoneEl.classList.add('zone-hover');
+      const after = getDragAfterElement(zoneEl, e.clientY);
+      if(after == null) zoneEl.appendChild(dragEl);
+      else zoneEl.insertBefore(dragEl, after);
+    });
+    zoneEl.addEventListener('dragleave', e=>{
+      if(e.target === zoneEl) zoneEl.classList.remove('zone-hover');
+    });
+    zoneEl.addEventListener('drop', e=>{
+      e.preventDefault();
+      zoneEl.classList.remove('zone-hover');
+      dropHandled = true;
+      const dragEl = document.querySelector('.player-card.dragging');
+      if(!dragEl || !dragCtx) return;
+      const zoneKey = zoneEl.dataset.zone;
+      const player = state.players.find(p=>p.id === dragCtx.playerId);
+      if(!player) return;
+
+      const accepted = ACCEPT[zoneKey] || POSITIONS;
+      if(!accepted.includes(player.position)){
+        revertDrag();
+        toast(player.name + " is a " + player.position + " — can't go in that slot.");
+        return;
+      }
+
+      // Starters remain hard-capped (a lineup slot can only hold one player).
+      // Backups / Stashes / IR / Taxi are soft caps: overflow allowed, badges turn red.
+      if(zoneKey.startsWith('starter-')){
+        const capacity = getStarterCapacity(zoneKey);
+        const currentCount = zoneEl.children.length;
+        if(currentCount > capacity){
+          revertDrag();
+          toast("No open slots there (" + capacity + " max).");
+          return;
+        }
+      }
+
+      // accepted: commit
+      syncOrderFromDOM(zoneEl);
+      if(dragCtx.parent && dragCtx.parent !== zoneEl){
+        syncOrderFromDOM(dragCtx.parent);
+      }
+      save();
+      updateBadges();
+
+      if((zoneKey.startsWith('backup-') || zoneKey.startsWith('stash-')) && totalBenchCount() > state.settings.BENCH){
+        toast('Bench is over your set limit (' + state.settings.BENCH + ')');
+      } else if(zoneKey === 'ir' && playersInZone('ir').length > state.settings.IR){
+        toast('IR is over your set limit (' + state.settings.IR + ')');
+      } else if(zoneKey === 'taxi' && playersInZone('taxi').length > state.settings.TAXI){
+        toast('Taxi squad is over your set limit (' + state.settings.TAXI + ')');
+      }
+    });
+  }
+
+  function revertDrag(){
+    if(!dragCtx) return;
+    const { el, parent, next } = dragCtx;
+    if(parent){
+      if(next && next.parentElement === parent) parent.insertBefore(el, next);
+      else parent.appendChild(el);
+    }
+  }
+
+  function makeDraggable(cardEl, player){
+    cardEl.draggable = true;
+    cardEl.addEventListener('dragstart', e=>{
+      dropHandled = false;
+      dragCtx = { el: cardEl, parent: cardEl.parentElement, next: cardEl.nextSibling, playerId: player.id };
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', player.id);
+      setTimeout(()=> cardEl.classList.add('dragging'), 0);
+    });
+    cardEl.addEventListener('dragend', ()=>{
+      cardEl.classList.remove('dragging');
+      document.querySelectorAll('.zone-hover').forEach(z=>z.classList.remove('zone-hover'));
+      if(!dropHandled){
+        revertDrag();
+      }
+      dragCtx = null;
+    });
+  }
+
+  // ---------- Rendering ----------
+  function createCard(player){
+    const card = document.createElement('div');
+    card.className = 'player-card ' + player.position;
+    card.dataset.id = player.id;
+
+    const info = document.createElement('div');
+    info.className = 'card-info';
+    const name = document.createElement('div');
+    name.className = 'card-name';
+    name.textContent = player.name;
+    const meta = document.createElement('div');
+    meta.className = 'card-meta';
+    const chip = document.createElement('span');
+    chip.className = 'pos-chip ' + player.position;
+    chip.textContent = player.position;
+    meta.appendChild(chip);
+    if(player.team){
+      const teamSpan = document.createElement('span');
+      teamSpan.textContent = player.team;
+      meta.appendChild(teamSpan);
+    }
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'card-actions';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'icon-btn editbtn';
+    editBtn.title = 'Edit player';
+    editBtn.textContent = '✎';
+    editBtn.onclick = ()=> openModalForEdit(player);
+    const delBtn = document.createElement('button');
+    delBtn.className = 'icon-btn del';
+    delBtn.title = 'Delete player';
+    delBtn.textContent = '✕';
+    delBtn.onclick = ()=>{
+      if(confirm('Remove ' + player.name + ' permanently?')){
+        state.players = state.players.filter(p=>p.id !== player.id);
+        save(); renderAll();
+      }
+    };
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+
+    card.appendChild(info);
+    card.appendChild(actions);
+    makeDraggable(card, player);
+    return card;
+  }
+
+  function renderZoneSimple(zoneKey, containerId){
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    container.dataset.zone = zoneKey;
+    playersInZone(zoneKey).forEach(p=> container.appendChild(createCard(p)));
+    attachZoneEvents(container);
+  }
+
+  function posFullName(pos){
+    return {
+      QB:'Quarterback', RB:'Running Back', WR:'Wide Receiver', TE:'Tight End', K:'Kicker',
+      DL:'Defensive Line', LB:'Linebacker', DB:'Defensive Back'
+    }[pos] || pos;
+  }
+
+  function buildPositionColumn(grid, pos){
+    const count = state.settings[pos] || 0;
+    if(count <= 0) return;
+    const zoneKey = 'starter-' + pos;
+    const isFlexType = FLEX_TYPES.includes(pos);
+
+    const col = document.createElement('div');
+    col.className = 'starter-column';
+
+    const head = document.createElement('div');
+    head.className = 'col-head';
+    const label = document.createElement('div');
+    label.className = 'pos-label';
+    const chip = document.createElement('span');
+    chip.className = 'pos-chip ' + pos;
+    chip.textContent = pos === 'IDPFLEX' ? 'FLX' : pos;
+    label.appendChild(chip);
+    const labelText = pos === 'FLEX' ? 'FLEX (RB/WR/TE)'
+      : pos === 'IDPFLEX' ? 'IDP FLEX (DL/LB/DB)'
+      : posFullName(pos);
+    label.appendChild(document.createTextNode(labelText));
+    const badge = document.createElement('span');
+    badge.className = 'count-badge';
+    badge.id = 'badge-' + zoneKey;
+    head.appendChild(label);
+    head.appendChild(badge);
+
+    const starterZoneEl = document.createElement('div');
+    starterZoneEl.className = 'dropzone';
+    starterZoneEl.id = 'zone-' + zoneKey;
+    starterZoneEl.dataset.zone = zoneKey;
+
+    col.appendChild(head);
+    col.appendChild(starterZoneEl);
+
+    if(!isFlexType){
+      RESERVE_KINDS.forEach(kind=>{
+        const reserveZoneKey = kind + '-' + pos;
+        const divider = document.createElement('div');
+        divider.className = 'subsection-divider';
+        const subtitle = document.createElement('span');
+        subtitle.className = 'subtitle';
+        subtitle.textContent = kind === 'backup' ? 'Backups' : 'Stashes';
+        const reserveBadge = document.createElement('span');
+        reserveBadge.className = 'count-badge';
+        reserveBadge.id = 'badge-' + reserveZoneKey;
+        divider.appendChild(subtitle);
+        divider.appendChild(reserveBadge);
+
+        const reserveZoneEl = document.createElement('div');
+        reserveZoneEl.className = 'dropzone bench-slot';
+        reserveZoneEl.id = 'zone-' + reserveZoneKey;
+        reserveZoneEl.dataset.zone = reserveZoneKey;
+
+        col.appendChild(divider);
+        col.appendChild(reserveZoneEl);
+      });
+
+      grid.appendChild(col);
+
+      playersInZone(zoneKey).forEach(p=> starterZoneEl.appendChild(createCard(p)));
+      attachZoneEvents(starterZoneEl);
+      RESERVE_KINDS.forEach(kind=>{
+        const reserveZoneKey = kind + '-' + pos;
+        const reserveZoneEl = document.getElementById('zone-' + reserveZoneKey);
+        playersInZone(reserveZoneKey).forEach(p=> reserveZoneEl.appendChild(createCard(p)));
+        attachZoneEvents(reserveZoneEl);
+      });
+    } else {
+      const hint = document.createElement('div');
+      hint.className = 'flex-hint';
+      hint.textContent = pos === 'FLEX'
+        ? 'Flex accepts RB / WR / TE — drag eligible players from their backup/stash sections.'
+        : 'IDP Flex accepts DL / LB / DB — drag eligible players from their backup/stash sections.';
+      col.appendChild(hint);
+
+      grid.appendChild(col);
+
+      playersInZone(zoneKey).forEach(p=> starterZoneEl.appendChild(createCard(p)));
+      attachZoneEvents(starterZoneEl);
+    }
+  }
+
+  function renderStarters(){
+    const grid = document.getElementById('startersGrid');
+    grid.innerHTML = '';
+
+    const offenseHeading = document.createElement('div');
+    offenseHeading.className = 'group-heading';
+    offenseHeading.textContent = 'Offense';
+    grid.appendChild(offenseHeading);
+
+    ["QB","RB","WR","TE","FLEX","K"].forEach(pos=> buildPositionColumn(grid, pos));
+
+    const idpVisible = IDP_POSITIONS.concat(['IDPFLEX']).some(pos => (state.settings[pos] || 0) > 0);
+    if(idpVisible){
+      const idpHeading = document.createElement('div');
+      idpHeading.className = 'group-heading';
+      idpHeading.textContent = 'IDP — Individual Defensive Players';
+      grid.appendChild(idpHeading);
+      ["DL","LB","DB","IDPFLEX"].forEach(pos=> buildPositionColumn(grid, pos));
+    }
+  }
+
+  function updateBadges(){
+    STARTER_ORDER.forEach(pos=>{
+      const count = state.settings[pos] || 0;
+      if(count <= 0) return;
+      const zoneKey = 'starter-' + pos;
+      const badge = document.getElementById('badge-' + zoneKey);
+      if(!badge) return;
+      const filled = playersInZone(zoneKey).length;
+      badge.textContent = filled + '/' + count;
+      badge.classList.toggle('over', filled > count);
+
+      if(!FLEX_TYPES.includes(pos)){
+        RESERVE_KINDS.forEach(kind=>{
+          const reserveZoneKey = kind + '-' + pos;
+          const reserveBadge = document.getElementById('badge-' + reserveZoneKey);
+          if(reserveBadge){
+            reserveBadge.textContent = String(playersInZone(reserveZoneKey).length);
+          }
+        });
+      }
+    });
+
+    const benchTotalBadge = document.getElementById('badge-bench-total');
+    const benchFilledTotal = totalBenchCount();
+    benchTotalBadge.textContent = 'Bench ' + benchFilledTotal + '/' + state.settings.BENCH;
+    benchTotalBadge.classList.toggle('over', benchFilledTotal > state.settings.BENCH);
+
+    const irFilled = playersInZone('ir').length;
+    const irBadge = document.getElementById('badge-ir');
+    irBadge.textContent = irFilled + '/' + state.settings.IR;
+    irBadge.classList.toggle('over', irFilled > state.settings.IR);
+
+    const taxiFilled = playersInZone('taxi').length;
+    const taxiBadge = document.getElementById('badge-taxi');
+    taxiBadge.textContent = taxiFilled + '/' + state.settings.TAXI;
+    taxiBadge.classList.toggle('over', taxiFilled > state.settings.TAXI);
+  }
+
+  function renderAll(){
+    renderStarters();
+    renderZoneSimple('ir', 'zone-ir');
+    renderZoneSimple('taxi', 'zone-taxi');
+    renderZoneSimple('cut', 'zone-cut');
+    updateBadges();
+    save();
+  }
+
+  // ---------- Settings ----------
+  function loadSettingsToInputs(){
+    Object.keys(state.settings).forEach(k=>{
+      const el = document.getElementById('cfg-' + k);
+      if(el) el.value = state.settings[k];
+    });
+  }
+
+  document.getElementById('btnApplySettings').onclick = ()=>{
+    ['QB','RB','WR','TE','FLEX','K','DL','LB','DB','IDPFLEX','BENCH','IR','TAXI'].forEach(k=>{
+      const el = document.getElementById('cfg-' + k);
+      const val = parseInt(el.value, 10);
+      state.settings[k] = isNaN(val) || val < 0 ? 0 : val;
+    });
+    renderAll();
+    toast('Settings applied');
+  };
+
+  // ---------- Settings collapse ----------
+  const settingsPanel = document.getElementById('settingsPanel');
+  document.getElementById('settingsHeader').addEventListener('click', ()=>{
+    settingsPanel.classList.toggle('collapsed');
+  });
+
+  // ---------- Add / Edit Player Modal ----------
+  const overlay = document.getElementById('modalOverlay');
+
+  function buildDestinationOptions(mode){
+    const sel = document.getElementById('inpDestination');
+    let html = '';
+    if(mode === 'edit'){
+      html += '<option value="keep">Keep Current Spot</option>';
+    }
+    html += '<option value="backup">Backups</option>';
+    html += '<option value="stash">Stashes</option>';
+    html += '<option value="taxi">Taxi Squad</option>';
+    html += '<option value="ir">Injured Reserve</option>';
+    html += '<option value="cut">Cut / Trade Block</option>';
+    sel.innerHTML = html;
+    sel.value = mode === 'edit' ? 'keep' : 'backup';
+  }
+
+  function openModalForAdd(){
+    editingPlayerId = null;
+    document.getElementById('modalTitle').textContent = 'Add Player';
+    document.getElementById('inpName').value = '';
+    document.getElementById('inpPosition').value = 'QB';
+    document.getElementById('inpTeam').value = '';
+    buildDestinationOptions('add');
+    document.getElementById('btnSaveAddAnother').style.display = 'inline-flex';
+    document.getElementById('btnConfirmAdd').textContent = 'Add Player';
+    overlay.classList.add('open');
+    setTimeout(()=> document.getElementById('inpName').focus(), 50);
+  }
+
+  function openModalForEdit(player){
+    editingPlayerId = player.id;
+    document.getElementById('modalTitle').textContent = 'Edit Player';
+    document.getElementById('inpName').value = player.name;
+    document.getElementById('inpPosition').value = player.position;
+    document.getElementById('inpTeam').value = player.team || '';
+    buildDestinationOptions('edit');
+    document.getElementById('btnSaveAddAnother').style.display = 'none';
+    document.getElementById('btnConfirmAdd').textContent = 'Save Changes';
+    overlay.classList.add('open');
+    setTimeout(()=> document.getElementById('inpName').focus(), 50);
+  }
+
+  document.getElementById('btnAddPlayer').onclick = openModalForAdd;
+  document.getElementById('btnCancelAdd').onclick = ()=> overlay.classList.remove('open');
+  overlay.addEventListener('click', e=>{ if(e.target === overlay) overlay.classList.remove('open'); });
+
+  function createPlayer(name, position, team, destination){
+    const zoneKey = (destination === 'backup' || destination === 'stash') ? destination + '-' + position : destination;
+    const orders = playersInZone(zoneKey).map(p=>p.order);
+    const order = orders.length ? Math.max(...orders) + 1 : 0;
+    state.players.push({ id: uid(), name, position, team, zone: zoneKey, order });
+    return zoneKey;
+  }
+
+  function updatePlayer(id, name, position, team, destination){
+    const player = state.players.find(p=>p.id === id);
+    if(!player) return;
+    player.name = name;
+    player.team = team;
+    player.position = position;
+
+    let newZone;
+    if(destination === 'keep'){
+      newZone = positionAllowedInZone(player.zone, position) ? player.zone : ('backup-' + position);
+    } else if(destination === 'backup' || destination === 'stash'){
+      newZone = destination + '-' + position;
+    } else {
+      newZone = destination;
+    }
+
+    if(newZone !== player.zone){
+      const orders = playersInZone(newZone).map(p=>p.order);
+      player.order = orders.length ? Math.max(...orders) + 1 : 0;
+      player.zone = newZone;
+    }
+  }
+
+  document.getElementById('addPlayerForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const submitter = e.submitter;
+    const stay = submitter && submitter.dataset.action === 'stay';
+
+    const name = document.getElementById('inpName').value.trim();
+    if(!name){ toast('Enter a player name'); document.getElementById('inpName').focus(); return; }
+    const position = document.getElementById('inpPosition').value;
+    const destination = document.getElementById('inpDestination').value;
+    const team = document.getElementById('inpTeam').value.trim();
+
+    if(editingPlayerId){
+      updatePlayer(editingPlayerId, name, position, team, destination);
+      overlay.classList.remove('open');
+      renderAll();
+      toast(name + ' updated');
+    } else {
+      createPlayer(name, position, team, destination);
+      renderAll();
+
+      const destLabel = { backup:'Backups', stash:'Stashes', taxi:'Taxi Squad', ir:'Injured Reserve', cut:'Cut/Trade Block' }[destination];
+      if(stay){
+        toast(name + ' added to ' + position + ' ' + destLabel + ' — add another');
+        document.getElementById('inpName').value = '';
+        document.getElementById('inpTeam').value = '';
+        document.getElementById('inpName').focus();
+      } else {
+        overlay.classList.remove('open');
+        toast(name + ' added to ' + position + ' ' + destLabel);
+      }
+
+      if((destination === 'backup' || destination === 'stash') && totalBenchCount() > state.settings.BENCH){
+        toast('Bench is over your set limit (' + state.settings.BENCH + ')');
+      }
+    }
+  });
+
+  document.addEventListener('keydown', e=>{
+    if(e.key === 'Escape' && overlay.classList.contains('open')){
+      overlay.classList.remove('open');
+    }
+  });
+
+  // ---------- Sample data ----------
+  document.getElementById('btnSampleData').onclick = ()=>{
+    if(state.players.length && !confirm('Add sample players on top of your current roster?')) return;
+    const samples = [
+      ['Patrick Mahomes','QB','KC','backup'],
+      ['Jalen Hurts','QB','PHI','backup'],
+      ['Bijan Robinson','RB','ATL','backup'],
+      ['Breece Hall','RB','NYJ','backup'],
+      ['De\'Von Achane','RB','MIA','stash'],
+      ['CeeDee Lamb','WR','DAL','backup'],
+      ['Justin Jefferson','WR','MIN','backup'],
+      ['Puka Nacua','WR','LAR','backup'],
+      ['Sam LaPorta','TE','DET','backup'],
+      ['Trey McBride','TE','ARI','backup'],
+      ['Harrison Butker','K','KC','backup'],
+      ['Micah Parsons','LB','DAL','backup'],
+      ['Fred Warner','LB','SF','backup'],
+      ['Antoine Winfield Jr.','DB','TB','backup'],
+      ['Myles Garrett','DL','CLE','backup'],
+      ['Rashee Rice','WR','KC','cut'],
+      ['Zack Moss','RB','CIN','cut'],
+      ['Jaylen Wright','RB','MIA','stash'],
+      ['Ricky Pearsall','WR','SF','stash']
+    ];
+    samples.forEach(([name,position,team,dest])=>{
+      createPlayer(name, position, team, dest);
+    });
+    renderAll();
+    toast('Sample roster loaded — drag players into your lineup');
+  };
+
+  // ---------- Export / Import ----------
+  document.getElementById('btnExport').onclick = ()=>{
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'fantasy-depth-chart.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  document.getElementById('importFile').addEventListener('change', e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = evt=>{
+      try{
+        const parsed = JSON.parse(evt.target.result);
+        if(parsed && parsed.settings && Array.isArray(parsed.players)){
+          state = parsed;
+          migrateState();
+          loadSettingsToInputs();
+          renderAll();
+          toast('Roster imported');
+        } else {
+          toast('Invalid file format');
+        }
+      }catch(err){
+        toast('Could not read file');
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  // ---------- Reset ----------
+  document.getElementById('btnReset').onclick = ()=>{
+    if(!confirm('Reset all players and settings? This cannot be undone.')) return;
+    state = { settings: Object.assign({}, DEFAULT_SETTINGS), players: [] };
+    localStorage.removeItem(STORAGE_KEY);
+    loadSettingsToInputs();
+    renderAll();
+    toast('Everything reset');
+  };
+
+  // ---------- Init ----------
+  load();
+  loadSettingsToInputs();
+  renderAll();
+})();
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3c43ce95dc13759',t:'MTc4OTYwNzQ5Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><iframe height="1" width="1" style="position: absolute; top: 0px; left: 0px; border: medium; visibility: hidden;"></iframe>
+
+</body></html>

@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
+/* Class-based dark mode (rather than only following the OS preference) so
+   the light/dark/auto theme picker can control it explicitly. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+}
+
+.dark {
+  --background: #14161c;
+  --foreground: #e7e9ee;
 }
 
 /* Scales every rem-based Tailwind utility (text, padding, gaps, sizing) up
@@ -18,17 +27,44 @@ html {
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+/* A staggered dot-grid texture behind dark-mode content, like the alternating
+   star rows on a flag. Two layers on the identical lattice (offset half a
+   tile both ways for the stagger) — a small-dot layer and a slightly larger
+   one — each masked to its own vertical band, so the dots are invisible near
+   the top, appear tiny through the middle, and read a bit larger by the
+   bottom without ever visually doubling up (the bigger dot simply covers the
+   smaller one at the same center point). */
+.dark body::before,
+.dark body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-size: 28px 28px;
+  background-position: 0 0, 14px 14px;
+}
+
+.dark body::before {
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.025) 1.3px, transparent 1.3px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.025) 1.3px, transparent 1.3px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 12%, black 30%);
+  mask-image: linear-gradient(to bottom, transparent 0%, transparent 12%, black 30%);
+}
+
+.dark body::after {
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.035) 2.2px, transparent 2.2px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.035) 2.2px, transparent 2.2px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 55%, black 90%);
+  mask-image: linear-gradient(to bottom, transparent 0%, transparent 55%, black 90%);
 }
 
 h1, h2, h3 {

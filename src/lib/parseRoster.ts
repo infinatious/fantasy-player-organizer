@@ -1,5 +1,6 @@
 import { normalizeName } from "./normalize";
 import type { PlayerRow } from "./players";
+import type { DepthChartSettings } from "./depthChart";
 
 export interface ParsedRosterLine {
   rawLine: string;
@@ -28,6 +29,12 @@ const NOISE_LINES = new Set([
   "new player note",
   "no new player notes",
   "box score",
+  "injured reserve",
+  "taxi",
+  "taxi squad",
+  "click on position buttons to update your lineup",
+  "own %",
+  "start %",
 ]);
 
 // "QB - DEN", "RB - IND": a position+team hint line, not a name.
@@ -60,6 +67,10 @@ const PARENTHETICAL_RE = /^\(.*\)$/;
 function looksLikePlayerName(line: string): boolean {
   const trimmed = line.trim();
   if (NOISE_LINES.has(trimmed.toLowerCase())) return false;
+  // A wide column-header row ("STARTERS\tNFL Week 2\t2026 season", "Pos\tOffense\t...")
+  // collapses onto one tab-joined line, unlike real rows in these same pastes
+  // which put one cell per line — so 2+ embedded tabs means table chrome.
+  if ((trimmed.match(/\t/g) || []).length >= 2) return false;
   if (POS_TEAM_HINT_RE.test(trimmed)) return false;
   if (GAME_TIME_RE.test(trimmed)) return false;
   if (BOX_SCORE_RE.test(trimmed)) return false;
@@ -80,6 +91,16 @@ function looksLikePlayerName(line: string): boolean {
 // "POS - TEAM" line (Sleeper's own format) to disambiguate when more than
 // one player shares the name.
 const ABBREV_NAME_RE = /^([A-Za-z])\.?\s+([A-Za-z][A-Za-z'.-]*)$/;
+
+// Narrows a same-name candidate list using a "POS - TEAM" hint. Team is the
+// more specific signal (rarely two same-named players on one roster); only
+// fall back to position if that doesn't narrow it.
+function narrowByPositionAndTeam(candidates: PlayerRow[], pos: string, team: string): PlayerRow[] {
+  const byTeam = candidates.filter((p) => p.team && p.team.toLowerCase() === team.toLowerCase());
+  if (byTeam.length > 0) return byTeam;
+  const byPos = candidates.filter((p) => p.position && p.position.toLowerCase() === pos.toLowerCase());
+  return byPos.length > 0 ? byPos : candidates;
+}
 
 function tryAbbreviatedMatch(
   line: string,
@@ -104,18 +125,44 @@ function tryAbbreviatedMatch(
 
   if (candidates.length > 1 && nextLine) {
     const hint = nextLine.trim().match(/^([A-Za-z]{1,4})\s*-\s*([A-Za-z]{2,4})$/);
-    if (hint) {
-      const [, pos, team] = hint;
-      // Team is the more specific signal (rarely two same-named players on
-      // one roster); only fall back to position if that doesn't narrow it.
-      const byTeam = candidates.filter((p) => p.team && p.team.toLowerCase() === team.toLowerCase());
-      const filtered =
-        byTeam.length > 0
-          ? byTeam
-          : candidates.filter((p) => p.position && p.position.toLowerCase() === pos.toLowerCase());
-      if (filtered.length > 0) candidates = filtered;
-    }
+    if (hint) candidates = narrowByPositionAndTeam(candidates, hint[1], hint[2]);
   }
+
+  return { best: candidates.length === 1 ? candidates[0] : null, candidates: candidates.slice(0, 5) };
+}
+
+// Fantasy platforms' own roster/lineup pages (as opposed to matchup views)
+// often copy-paste with no line break between the player's abbreviated name
+// and its position/team/bye cell, e.g. Sleeper's "D MayeQB - NE (11)" or
+// "J Croskey-MerrittRB - WAS (7)". Recognize the position code explicitly
+// (rather than a generic capital-letter run) so it can't misfire on a last
+// name that happens to contain capitals of its own (McCaffrey, LaPorta).
+const POSITION_CODE_ALTERNATION = "QB|RB|WR|TE|DEF|DST|D/ST|DL|DE|DT|NT|ILB|OLB|LB|DB|CB|FS|SS|S|K/P|K|P";
+const INLINE_ABBREV_RE = new RegExp(
+  `^([A-Za-z])\\.?\\s+([A-Za-z][A-Za-z'-]*?)(${POSITION_CODE_ALTERNATION})\\s*-\\s*([A-Za-z]{2,4})(?:\\s*\\(\\d{1,2}\\))?$`
+);
+
+function tryInlineAbbreviatedMatch(
+  line: string,
+  allPlayers: PlayerRow[]
+): { best: PlayerRow | null; candidates: PlayerRow[] } | null {
+  const m = line.trim().match(INLINE_ABBREV_RE);
+  if (!m) return null;
+  const [, initialRaw, lastNameRaw, pos, team] = m;
+  const initial = initialRaw.toLowerCase();
+  const lastName = normalizeName(lastNameRaw);
+  if (!lastName) return null;
+
+  let candidates = allPlayers.filter(
+    (p) =>
+      !!p.last_name &&
+      !!p.first_name &&
+      normalizeName(p.last_name) === lastName &&
+      p.first_name.trim().charAt(0).toLowerCase() === initial
+  );
+  if (candidates.length === 0) return null;
+
+  if (candidates.length > 1) candidates = narrowByPositionAndTeam(candidates, pos, team);
 
   return { best: candidates.length === 1 ? candidates[0] : null, candidates: candidates.slice(0, 5) };
 }
@@ -177,7 +224,7 @@ export function parseRosterText(text: string, allPlayers: PlayerRow[]): ParsedRo
     }
 
     if (!best) {
-      const abbrev = tryAbbreviatedMatch(line, lines[i + 1], allPlayers);
+      const abbrev = tryAbbreviatedMatch(line, lines[i + 1], allPlayers) ?? tryInlineAbbreviatedMatch(line, allPlayers);
       if (abbrev) {
         best = abbrev.best;
         candidates = abbrev.candidates;
@@ -295,4 +342,77 @@ export function parseMatchup(text: string, allPlayers: PlayerRow[]): MatchupResu
   const flat = parseRosterText(text, allPlayers);
   const rows: MatchupRow[] = flat.map((r, i) => ({ ...r, side: (i % 2 === 0 ? 0 : 1) as 0 | 1 }));
   return { labelA: "Team A", labelB: "Team B", rows, method: "alternating" };
+}
+
+// Sleeper, ESPN, and Yahoo all lay out a roster as one row per slot with the
+// slot's label as its own cell — which, once pasted as plain text, becomes a
+// standalone line immediately before that row's player. Sleeper additionally
+// explodes a FLEX/superflex slot's letters ("W","R","T" or "W","R","T","Q")
+// across their own lines. Tallying exact matches against these known tokens
+// (rather than trying to read the header row, which varies by league scoring
+// format) lets us infer the league's starter/bench shape straight from a
+// pasted roster.
+const FLEX_LETTERS = new Set(["Q", "W", "R", "T"]);
+
+const SLOT_TOKEN_TO_SETTING: Record<string, keyof DepthChartSettings> = {
+  QB: "QB",
+  RB: "RB",
+  WR: "WR",
+  TE: "TE",
+  K: "K",
+  DL: "DL",
+  LB: "LB",
+  DB: "DB",
+  FLEX: "FLEX",
+  "W/R/T": "FLEX",
+  "Q/W/R/T": "FLEX",
+  BN: "BENCH",
+  Bench: "BENCH",
+  IR: "IR",
+  TX: "TAXI",
+};
+
+// A genuine slot-label line is always immediately followed by that row's
+// player identifier. A bare number/percentage right after rules out a slot
+// label — this is what filters out Sleeper's "IR" *injury status* line
+// (buried mid-row, followed by more stat cells like "61%") from being
+// mistaken for another "IR" *roster slot* row.
+const NUMERIC_CELL_RE = /^-?\$?[\d.]+%?$/;
+
+function looksLikeRowStart(line: string | undefined): boolean {
+  return line !== undefined && !NUMERIC_CELL_RE.test(line);
+}
+
+// Only returns settings we found direct evidence for — a paste that doesn't
+// happen to include, say, the IR section shouldn't be read as "this league
+// has zero IR spots" and clobber whatever the user already configured.
+export function inferSlotCounts(text: string): Partial<DepthChartSettings> {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const counts: Partial<Record<keyof DepthChartSettings, number>> = {};
+  const bump = (key: keyof DepthChartSettings) => {
+    counts[key] = (counts[key] ?? 0) + 1;
+  };
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line.length === 1 && FLEX_LETTERS.has(line)) {
+      let j = i;
+      while (j < lines.length && lines[j].length === 1 && FLEX_LETTERS.has(lines[j])) j++;
+      if (looksLikeRowStart(lines[j])) bump("FLEX");
+      i = j;
+      continue;
+    }
+
+    const mapped = SLOT_TOKEN_TO_SETTING[line];
+    if (mapped && looksLikeRowStart(lines[i + 1])) bump(mapped);
+    i++;
+  }
+
+  return counts;
 }

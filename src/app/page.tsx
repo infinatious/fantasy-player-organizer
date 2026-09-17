@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSeasonWeek } from "@/context/SeasonWeekContext";
+import { SeasonWeekPicker } from "@/components/SeasonWeekPicker";
 import { teamGlowStyle, playerImageUrl, positionBadgeClasses, teamLogoUrl, TEAM_COLORS } from "@/lib/teamColors";
 
 interface DashboardLeagueRef {
@@ -144,19 +145,28 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">
-            Week {weekNumber} Dashboard — {seasonYear}
+            Week {weekNumber} Rooting Guide — {seasonYear}
           </h1>
           <p className="text-sm text-neutral-500">
             Who to watch, grouped by kickoff time, across all your leagues.
           </p>
         </div>
-        <button
-          onClick={refreshSchedule}
-          disabled={refreshing}
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-neutral-700"
-        >
-          {refreshing ? "Refreshing…" : "Refresh Schedule"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <SeasonWeekPicker />
+          <Link
+            href="/entry"
+            className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
+          >
+            Enter Rosters
+          </Link>
+          <button
+            onClick={refreshSchedule}
+            disabled={refreshing}
+            className="rounded border border-neutral-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-neutral-700"
+          >
+            {refreshing ? "Refreshing…" : "Refresh Schedule"}
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -214,7 +224,7 @@ export default function DashboardPage() {
                               <div
                                 key={p.playerId}
                                 style={teamGlowStyle(p.team)}
-                                className="relative overflow-hidden rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
+                                className="relative overflow-hidden rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
                               >
                                 {p.team && (
                                   // eslint-disable-next-line @next/next/no-img-element

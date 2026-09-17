@@ -71,6 +71,22 @@ function migrate(db: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_roster_lookup ON roster_entries(season_year, week_number, league_id, side);
+
+    CREATE TABLE IF NOT EXISTS depth_charts (
+      league_id INTEGER PRIMARY KEY REFERENCES leagues(id) ON DELETE CASCADE,
+      data TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS league_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+      season_year INTEGER NOT NULL,
+      week_number INTEGER NOT NULL,
+      result TEXT NOT NULL CHECK (result IN ('W', 'L', 'T')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(league_id, season_year, week_number)
+    );
   `);
 
   // CREATE TABLE IF NOT EXISTS doesn't add columns to a table that already
@@ -86,6 +102,9 @@ function migrate(db: Database.Database) {
   );
   if (!leagueColumns.has("weight")) {
     db.exec("ALTER TABLE leagues ADD COLUMN weight INTEGER NOT NULL DEFAULT 5");
+  }
+  if (!leagueColumns.has("team_name")) {
+    db.exec("ALTER TABLE leagues ADD COLUMN team_name TEXT");
   }
 }
 
