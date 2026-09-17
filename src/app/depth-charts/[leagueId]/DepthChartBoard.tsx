@@ -269,6 +269,8 @@ function DropZone({
 export function DepthChartBoard({ leagueId }: { leagueId: number }) {
   const [data, setData] = useState<DepthChartData | null>(null);
   const [leagueName, setLeagueName] = useState("");
+  const [sleeperLeagueId, setSleeperLeagueId] = useState<string | null>(null);
+  const [sleeperRosterId, setSleeperRosterId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [draft, setDraft] = useState<DepthChartSettings>(DEFAULT_DEPTH_CHART_SETTINGS);
@@ -309,6 +311,8 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
       setDraft(normalized.settings);
       const league = (leaguesData.leagues ?? []).find((l: { id: number }) => l.id === leagueId);
       setLeagueName(league?.name ?? "");
+      setSleeperLeagueId(league?.sleeper_league_id ?? null);
+      setSleeperRosterId(league?.sleeper_roster_id ?? null);
       setLoading(false);
     })();
     return () => {
@@ -1077,6 +1081,8 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
 
       {sleeperOpen && (
         <SleeperSyncModal
+          sleeperLeagueId={sleeperLeagueId}
+          sleeperRosterId={sleeperRosterId}
           onSync={(synced) => {
             commit(synced);
             showToast("Synced from Sleeper");

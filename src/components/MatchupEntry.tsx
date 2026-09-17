@@ -42,10 +42,22 @@ export function MatchupEntry({
   const [status, setStatus] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [sleeperOpen, setSleeperOpen] = useState(false);
+  const [sleeperLeagueId, setSleeperLeagueId] = useState<string | null>(null);
+  const [sleeperRosterId, setSleeperRosterId] = useState<number | null>(null);
   const loadedKey = useRef<string | null>(null);
 
   const panels: [Row[], Row[]] | null = panelA && panelB ? [panelA, panelB] : null;
   const setPanel = [setPanelA, setPanelB];
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch(withBasePath("/api/leagues"));
+      const data = await res.json();
+      const league = (data.leagues ?? []).find((l: { id: number }) => l.id === leagueId);
+      setSleeperLeagueId(league?.sleeper_league_id ?? null);
+      setSleeperRosterId(league?.sleeper_roster_id ?? null);
+    })();
+  }, [leagueId]);
 
   useEffect(() => {
     const key = `${leagueId}-${seasonYear}-${weekNumber}`;
@@ -278,7 +290,13 @@ export function MatchupEntry({
       </button>
 
       {sleeperOpen && (
-        <SleeperMatchupModal week={weekNumber} onSync={applySleeperMatchup} onClose={() => setSleeperOpen(false)} />
+        <SleeperMatchupModal
+          sleeperLeagueId={sleeperLeagueId}
+          sleeperRosterId={sleeperRosterId}
+          week={weekNumber}
+          onSync={applySleeperMatchup}
+          onClose={() => setSleeperOpen(false)}
+        />
       )}
 
       {panels && (

@@ -106,6 +106,12 @@ function migrate(db: Database.Database) {
   if (!leagueColumns.has("team_name")) {
     db.exec("ALTER TABLE leagues ADD COLUMN team_name TEXT");
   }
+  if (!leagueColumns.has("sleeper_league_id")) {
+    db.exec("ALTER TABLE leagues ADD COLUMN sleeper_league_id TEXT");
+  }
+  if (!leagueColumns.has("sleeper_roster_id")) {
+    db.exec("ALTER TABLE leagues ADD COLUMN sleeper_roster_id INTEGER");
+  }
 }
 
 export function getDb(): Database.Database {

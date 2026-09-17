@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { PlatformBadge } from "@/components/PlatformBadge";
+import { SleeperConnectionFields } from "@/components/SleeperConnectionFields";
 import type { Platform } from "@/lib/platforms";
 import { type DepthChartPlayer, STARTER_ORDER, normalizeDepthChartData } from "@/lib/depthChart";
 import { playerImageUrl } from "@/lib/teamColors";
@@ -15,6 +16,8 @@ interface League {
   platform: Platform;
   weight: number;
   team_name: string | null;
+  sleeper_league_id: string | null;
+  sleeper_roster_id: number | null;
 }
 
 function starterPosition(zone: string): string {
@@ -104,9 +107,18 @@ interface LeagueFormState {
   teamName: string;
   platform: Platform;
   weight: number;
+  sleeperLeagueId: string;
+  sleeperRosterId: number | null;
 }
 
-const EMPTY_FORM: LeagueFormState = { name: "", teamName: "", platform: "sleeper", weight: 5 };
+const EMPTY_FORM: LeagueFormState = {
+  name: "",
+  teamName: "",
+  platform: "sleeper",
+  weight: 5,
+  sleeperLeagueId: "",
+  sleeperRosterId: null,
+};
 
 export default function LeaguesPage() {
   const [leagues, setLeagues] = useState<League[]>([]);
@@ -151,7 +163,14 @@ export default function LeaguesPage() {
 
   function openEditModal(l: League) {
     setEditingId(l.id);
-    setForm({ name: l.name, teamName: l.team_name ?? "", platform: l.platform, weight: l.weight });
+    setForm({
+      name: l.name,
+      teamName: l.team_name ?? "",
+      platform: l.platform,
+      weight: l.weight,
+      sleeperLeagueId: l.sleeper_league_id ?? "",
+      sleeperRosterId: l.sleeper_roster_id,
+    });
     setModalMode("edit");
   }
 
@@ -164,6 +183,8 @@ export default function LeaguesPage() {
       team_name: form.teamName.trim() || null,
       platform: form.platform,
       weight: form.weight,
+      sleeper_league_id: form.sleeperLeagueId.trim() || null,
+      sleeper_roster_id: form.sleeperRosterId,
     });
     if (modalMode === "edit" && editingId) {
       await fetch(withBasePath(`/api/leagues/${editingId}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, body });
@@ -314,6 +335,15 @@ export default function LeaguesPage() {
                   money/serious leagues higher, just-for-fun leagues lower.
                 </span>
               </label>
+
+              {form.platform === "sleeper" && (
+                <SleeperConnectionFields
+                  key={editingId ?? "new"}
+                  sleeperLeagueId={form.sleeperLeagueId}
+                  sleeperRosterId={form.sleeperRosterId}
+                  onChange={(next) => setForm((f) => ({ ...f, ...next }))}
+                />
+              )}
 
               <div className="flex items-center justify-between gap-2 pt-2">
                 {modalMode === "edit" && editingId ? (
