@@ -298,12 +298,16 @@ export default function StatsPage() {
         ) : (
           <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900">
             {leagues.map((l) => {
-              const streak = computeStreak(results.filter((r) => r.league_id === l.id));
+              const leagueResults = results.filter((r) => r.league_id === l.id);
+              const streak = computeStreak(leagueResults);
               return (
                 <li key={l.id} className="flex items-center justify-between gap-3 px-4 py-3">
                   <div className="flex items-center gap-3">
                     <PlatformBadge platform={l.platform} />
-                    <p className="font-medium leading-tight">{l.team_name || l.name}</p>
+                    <div>
+                      <p className="font-medium leading-tight">{l.team_name || l.name}</p>
+                      <p className="text-xs text-neutral-500">{formatRecord(record(leagueResults))}</p>
+                    </div>
                   </div>
                   {streak ? (
                     <span

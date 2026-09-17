@@ -198,7 +198,13 @@ export default function LeaguesPage() {
                     .
                   </p>
                 ) : (
-                  <div className="relative flex min-w-0 flex-1 items-center overflow-x-hidden">
+                  // overflow-x-hidden paired with overflow-y-visible doesn't work — per
+                  // spec, "hidden" on one axis forces the other's "visible" to compute as
+                  // "auto" too (since a real scroll container needs both axes resolved),
+                  // which would still clip the tooltip above this row. overflow-x-clip
+                  // doesn't establish a scroll container, so it isn't subject to that
+                  // coupling and overflow-y-visible actually stays visible.
+                  <div className="relative flex min-w-0 flex-1 items-center overflow-x-clip overflow-y-visible">
                     {starters[l.id].map((p, i) => (
                       <StarterAvatar key={p.id} player={p} zIndex={starters[l.id].length - i} />
                     ))}

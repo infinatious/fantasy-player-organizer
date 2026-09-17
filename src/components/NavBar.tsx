@@ -10,7 +10,7 @@ import { withBasePath } from "@/lib/basePath";
 const LINKS = [
   { href: "/leagues", label: "Leagues" },
   { href: "/stats", label: "Stats" },
-  { href: "/", label: "Rooting Guide" },
+  { href: "/rooting-guide", label: "Rooting Guide" },
 ];
 
 export function NavBar() {
@@ -32,7 +32,9 @@ export function NavBar() {
           </Link>
           <div className="flex gap-1">
             {LINKS.map((link) => {
-              const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+              // "/" redirects straight to Leagues, so treat it as the same tab.
+              const active =
+                link.href === "/leagues" ? pathname === "/" || pathname.startsWith(link.href) : pathname.startsWith(link.href);
               return (
                 <Link
                   key={link.href}
