@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { RowsEditor } from "./RowsEditor";
 import { type ParsedLine, type Row, rowFromParsedLine, rowFromSavedEntry } from "./rosterRows";
 import { withBasePath } from "@/lib/basePath";
+import { mapToDepthChartPosition, normalizeDepthChartData } from "@/lib/depthChart";
+import { computeStarterSync, type StartingPlayerInput } from "@/lib/starterSync";
 
 interface SavedEntryWithOpponent {
   raw_text: string;
@@ -123,6 +125,38 @@ export function MatchupEntry({
     setPanel[toIndex]((prev) => (prev ? [...prev, moved] : [moved]));
   }
 
+  // A live matchup/box-score paste is inherently starters-only (there's no
+  // bench in that view), so the whole "mine" panel is this week's lineup —
+  // reconcile the depth chart's starter zones to match it.
+  async function syncDepthChart(mineRows: Row[]) {
+    const starters: StartingPlayerInput[] = mineRows
+      .filter((r) => r.playerId)
+      .map((r) => ({
+        playerId: r.playerId,
+        name: r.displayName,
+        position: mapToDepthChartPosition(r.position),
+        team: r.team,
+      }))
+      .filter((s): s is StartingPlayerInput => !!s.position);
+    if (starters.length === 0) return null;
+
+    const dcRes = await fetch(withBasePath(`/api/depth-chart/${leagueId}`));
+    const dcJson = await dcRes.json();
+    const current = normalizeDepthChartData(dcJson.data);
+    const { data: next, promoted, demoted, overflow } = computeStarterSync(current, starters);
+    if (promoted.length === 0 && demoted.length === 0) return null;
+
+    await fetch(withBasePath(`/api/depth-chart/${leagueId}`), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
+    const parts = [];
+    if (promoted.length) parts.push(`${promoted.length} to starting`);
+    if (demoted.length) parts.push(`${demoted.length} to bench`);
+    return `Depth chart updated: ${parts.join(", ")}${overflow ? " (some slot counts look out of date)" : ""}`;
+  }
+
   async function handleSave() {
     if (!panels) return;
     setSaving(true);
@@ -162,9 +196,15 @@ export function MatchupEntry({
         }),
       }),
     ]);
+    let syncMsg: string | null = null;
+    try {
+      syncMsg = await syncDepthChart(panels[mineIndex]);
+    } catch {
+      syncMsg = "Couldn't sync the depth chart — try again from the depth chart page.";
+    }
     setSaving(false);
     const total = panels[0].length + panels[1].length;
-    setStatus(`Saved ${total} players across both teams.`);
+    setStatus(`Saved ${total} players across both teams.${syncMsg ? ` ${syncMsg}` : ""}`);
   }
 
   return (

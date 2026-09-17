@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { RowsEditor } from "./RowsEditor";
 import { type ParsedLine, type Row, type SavedEntry, rowFromParsedLine, rowFromSavedEntry } from "./rosterRows";
 import { withBasePath } from "@/lib/basePath";
+import { mapToDepthChartPosition, normalizeDepthChartData } from "@/lib/depthChart";
+import { computeStarterSync, stripBenchSection, type StartingPlayerInput } from "@/lib/starterSync";
 
 export function RosterPasteBox({
   title,
@@ -64,6 +66,52 @@ export function RosterPasteBox({
     setParsing(false);
   }
 
+  // Resolves which saved rows are this week's starters (paste is usually
+  // starters-only; if a bench section is present, its players are excluded)
+  // and reconciles the league's depth chart to match. Only meaningful for
+  // "mine" — an opponent's lineup has no bearing on our own depth chart.
+  async function syncDepthChart() {
+    const truncated = stripBenchSection(text);
+    let eligiblePlayerIds: Set<string> | null = null;
+    if (truncated !== text) {
+      const res = await fetch(withBasePath("/api/roster/parse"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: truncated }),
+      });
+      const data = await res.json();
+      const lines: ParsedLine[] = data.lines ?? [];
+      eligiblePlayerIds = new Set(lines.map((l) => l.match?.player_id).filter((id): id is string => !!id));
+    }
+
+    const starters: StartingPlayerInput[] = rows
+      .filter((r) => r.playerId && (!eligiblePlayerIds || eligiblePlayerIds.has(r.playerId)))
+      .map((r) => ({
+        playerId: r.playerId,
+        name: r.displayName,
+        position: mapToDepthChartPosition(r.position),
+        team: r.team,
+      }))
+      .filter((s): s is StartingPlayerInput => !!s.position);
+    if (starters.length === 0) return null;
+
+    const dcRes = await fetch(withBasePath(`/api/depth-chart/${leagueId}`));
+    const dcJson = await dcRes.json();
+    const current = normalizeDepthChartData(dcJson.data);
+    const { data: next, promoted, demoted, overflow } = computeStarterSync(current, starters);
+    if (promoted.length === 0 && demoted.length === 0) return null;
+
+    await fetch(withBasePath(`/api/depth-chart/${leagueId}`), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
+    const parts = [];
+    if (promoted.length) parts.push(`${promoted.length} to starting`);
+    if (demoted.length) parts.push(`${demoted.length} to bench`);
+    return `Depth chart updated: ${parts.join(", ")}${overflow ? " (some slot counts look out of date)" : ""}`;
+  }
+
   async function handleSave() {
     setSaving(true);
     setStatus(null);
@@ -83,8 +131,16 @@ export function RosterPasteBox({
         })),
       }),
     });
+    let syncMsg: string | null = null;
+    if (side === "mine") {
+      try {
+        syncMsg = await syncDepthChart();
+      } catch {
+        syncMsg = "Couldn't sync the depth chart — try again from the depth chart page.";
+      }
+    }
     setSaving(false);
-    setStatus(`Saved ${rows.length} player${rows.length === 1 ? "" : "s"}.`);
+    setStatus(`Saved ${rows.length} player${rows.length === 1 ? "" : "s"}.${syncMsg ? ` ${syncMsg}` : ""}`);
   }
 
   const unmatchedCount = rows.filter((r) => !r.playerId).length;
