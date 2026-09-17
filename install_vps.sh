@@ -127,6 +127,10 @@ User=${APP_USER}
 WorkingDirectory=${APP_DIR}
 Environment=NODE_ENV=production
 Environment=PATH=${NODE_BIN_DIR}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# next.config.ts re-reads this at server startup, independently of what was
+# baked in at build time — without it here, the running server falls back
+# to no basePath even though the build itself was built with one.
+Environment=NEXT_PUBLIC_BASE_PATH=${TENANT_PATH}
 ExecStart=${NPM_BIN} run start -- -H 127.0.0.1 -p ${PORT}
 Restart=on-failure
 RestartSec=5
