@@ -231,14 +231,23 @@ export default function LeaguesPage() {
                     .
                   </p>
                 ) : (
-                  <div className="relative flex min-w-0 flex-1 items-center overflow-x-hidden">
+                  // Fades trailing headshots into the card background instead of a hard
+                  // clip. A real mask (rather than a color-matched overlay div) fades the
+                  // actual pixels regardless of theme, and reliably covers whatever avatar
+                  // lands at the edge — an overlay anchored to a fixed pixel width could
+                  // land past the last visible avatar and render as no fade at all. Safe to
+                  // mask now that the tooltip renders through a portal instead of living
+                  // inside this container.
+                  <div
+                    className="flex min-w-0 flex-1 items-center overflow-x-hidden"
+                    style={{
+                      maskImage: "linear-gradient(to right, black calc(100% - 64px), transparent)",
+                      WebkitMaskImage: "linear-gradient(to right, black calc(100% - 64px), transparent)",
+                    }}
+                  >
                     {starters[l.id].map((p, i) => (
                       <StarterAvatar key={p.id} player={p} zIndex={starters[l.id].length - i} />
                     ))}
-                    {/* Fades trailing headshots into the card background instead of a hard
-                        clip — a plain overlay rather than a mask so it can't affect the
-                        tooltips, which need to stay at full opacity even in this zone. */}
-                    <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-r from-transparent to-white dark:to-neutral-900" />
                   </div>
                 )}
               </div>
