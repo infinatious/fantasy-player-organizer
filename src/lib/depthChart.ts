@@ -9,6 +9,23 @@ export const STARTER_ORDER = ["QB", "RB", "WR", "TE", "FLEX", "K", "P", "DEF", "
 export const FLEX_TYPES = ["FLEX", "IDPFLEX"];
 export const RESERVE_KINDS = ["backup", "stash"] as const;
 
+// Offense FLEX has no zone of its own — a flex-eligible starter beyond
+// their own position's direct cap just sits in their own starter-<pos>
+// zone, and "is this the extra one" is a display-time question. This is
+// the shared bookkeeping both the UI and the weekly starter-sync use to
+// answer it consistently. IDP FLEX keeps its own dedicated zone and isn't
+// part of this.
+export const OFFENSE_FLEX_POSITIONS = ["RB", "WR", "TE"] as const;
+
+export function offenseFlexUsed(players: DepthChartPlayer[], settings: DepthChartSettings): number {
+  let used = 0;
+  for (const pos of OFFENSE_FLEX_POSITIONS) {
+    const count = players.filter((p) => p.zone === `starter-${pos}`).length;
+    used += Math.max(0, count - settings[pos]);
+  }
+  return used;
+}
+
 export interface DepthChartPlayer {
   id: string;
   playerId: string | null;
@@ -71,18 +88,25 @@ export function emptyDepthChartData(): DepthChartData {
 
 // Fills in any settings keys missing from older saved data (e.g. if a new
 // slot type is added later) rather than assuming the shape is always current.
+// Also re-homes any player still sitting in the now-retired "starter-FLEX"
+// zone into their own position's starter zone — offense FLEX no longer has
+// a dedicated zone; who's "the extra" is a display-time computation based
+// on order within that position's zone instead. IDP FLEX is unaffected.
 export function normalizeDepthChartData(data: Partial<DepthChartData> | null | undefined): DepthChartData {
   const settings = { ...DEFAULT_DEPTH_CHART_SETTINGS, ...(data?.settings ?? {}) };
-  const players = Array.isArray(data?.players) ? data.players : [];
+  const rawPlayers = Array.isArray(data?.players) ? data.players : [];
+  const players = rawPlayers.map((p) =>
+    p.zone === "starter-FLEX" ? { ...p, zone: `starter-${mapToDepthChartPosition(p.position) ?? p.position}` } : p
+  );
   return { settings, players };
 }
 
 export function buildAcceptMap(): Record<string, string[]> {
   const accept: Record<string, string[]> = {};
   STARTER_ORDER.forEach((pos) => {
-    if (pos === "FLEX") accept["starter-FLEX"] = ["RB", "WR", "TE"];
-    else if (pos === "IDPFLEX") accept["starter-IDPFLEX"] = ["DL", "LB", "DB"];
-    else accept["starter-" + pos] = [pos];
+    if (pos === "FLEX") return; // no dedicated zone — flex-eligible players live in their own position's zone
+    if (pos === "IDPFLEX") { accept["starter-IDPFLEX"] = ["DL", "LB", "DB"]; return; }
+    accept["starter-" + pos] = [pos];
   });
   POSITIONS.forEach((pos) => {
     accept["backup-" + pos] = [pos];

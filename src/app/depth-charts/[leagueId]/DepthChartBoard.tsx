@@ -7,12 +7,14 @@ import {
   type DepthChartSettings,
   DEFAULT_DEPTH_CHART_SETTINGS,
   FLEX_TYPES,
+  OFFENSE_FLEX_POSITIONS,
   POSITIONS,
   RESERVE_KINDS,
   buildAcceptMap,
   emptyDepthChartData,
   mapToDepthChartPosition,
   normalizeDepthChartData,
+  offenseFlexUsed,
   posFullName,
   uid,
 } from "@/lib/depthChart";
@@ -23,6 +25,7 @@ import { PasteRosterModal, type ImportItem } from "./PasteRosterModal";
 import { SleeperSyncModal } from "./SleeperSyncModal";
 
 const ACCEPT = buildAcceptMap();
+const OFFENSE_FLEX_SET = new Set<string>(OFFENSE_FLEX_POSITIONS);
 
 function playersInZone(players: DepthChartPlayer[], zone: string): DepthChartPlayer[] {
   return players.filter((p) => p.zone === zone).sort((a, b) => a.order - b.order);
@@ -74,6 +77,7 @@ function CountBadge({ filled, capacity }: { filled: number; capacity: number }) 
 function PlayerCard({
   player,
   dragging,
+  isFlexExtra,
   onDragStart,
   onDragEnd,
   onEdit,
@@ -81,6 +85,7 @@ function PlayerCard({
 }: {
   player: DepthChartPlayer;
   dragging: boolean;
+  isFlexExtra?: boolean;
   onDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
   onEdit: () => void;
@@ -107,6 +112,14 @@ function PlayerCard({
         dragging ? "opacity-30" : ""
       }`}
     >
+      {isFlexExtra && (
+        <span
+          title="Filling a FLEX slot"
+          className="absolute top-0.5 right-0.5 z-10 rounded bg-neutral-700 px-1 py-0.5 text-[8px] font-bold text-white dark:bg-neutral-200 dark:text-neutral-900"
+        >
+          FLEX
+        </span>
+      )}
       {player.team && !logoError && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -180,6 +193,7 @@ function DropZone({
   compact,
   emptyText,
   borderClassName,
+  flexExtraIds,
   hoverZone,
   setHoverZone,
   draggingId,
@@ -194,6 +208,7 @@ function DropZone({
   compact?: boolean;
   emptyText?: string;
   borderClassName?: string;
+  flexExtraIds?: Set<string>;
   hoverZone: string | null;
   setHoverZone: (z: string | null | ((prev: string | null) => string | null)) => void;
   draggingId: string | null;
@@ -234,6 +249,7 @@ function DropZone({
           key={p.id}
           player={p}
           dragging={draggingId === p.id}
+          isFlexExtra={flexExtraIds?.has(p.id)}
           onDragStart={(e) => onDragStartCard(e, p)}
           onDragEnd={onDragEndCard}
           onEdit={() => onEdit(p)}
@@ -469,9 +485,23 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
     const zoneMates = playersInZone(data.players, zoneKey).filter((p) => p.id !== playerId);
     if (zoneKey.startsWith("starter-")) {
       const pos = zoneKey.split("-")[1] as keyof DepthChartSettings;
-      const capacity = data.settings[pos] || 0;
-      if (zoneMates.length >= capacity) {
-        showToast(`No open slots there (${capacity} max).`);
+      const directCap = data.settings[pos] || 0;
+      // Offense flex has no zone of its own — a position can go one over
+      // its direct cap as long as the shared flex pool (across RB/WR/TE)
+      // still has room, once this player's own current contribution to
+      // that pool (if any) is set aside.
+      const hasFlexRoom =
+        OFFENSE_FLEX_SET.has(pos) &&
+        offenseFlexUsed(
+          data.players.filter((p) => p.id !== playerId),
+          data.settings
+        ) < data.settings.FLEX;
+      if (zoneMates.length >= directCap && !hasFlexRoom) {
+        showToast(
+          OFFENSE_FLEX_SET.has(pos)
+            ? `No open slots there (${directCap} max, and FLEX is full too).`
+            : `No open slots there (${directCap} max).`
+        );
         return;
       }
     }
@@ -633,6 +663,7 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
     if (!data) return null;
     const count = data.settings[pos as keyof DepthChartSettings] ?? 0;
     const isFlex = FLEX_TYPES.includes(pos);
+    const isOffenseFlexEligible = OFFENSE_FLEX_SET.has(pos);
     // A position with zero dedicated starter slots still needs its own
     // column — and bench/stash space — whenever it can fill a flex slot
     // (e.g. an IDP-flex-only league has DL/LB/DB all at 0 but still needs
@@ -640,14 +671,17 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
     // there from before a settings change.
     const flexEligible =
       !isFlex &&
-      ((["RB", "WR", "TE"].includes(pos) && data.settings.FLEX > 0) ||
+      ((isOffenseFlexEligible && data.settings.FLEX > 0) ||
         (["DL", "LB", "DB"].includes(pos) && data.settings.IDPFLEX > 0));
     const hasRosteredPlayers =
       !isFlex && RESERVE_KINDS.some((kind) => playersInZone(data.players, `${kind}-${pos}`).length > 0);
     if (count <= 0 && !flexEligible && !hasRosteredPlayers) return null;
     const zoneKey = `starter-${pos}`;
     const starters = playersInZone(data.players, zoneKey);
-    const label = pos === "FLEX" ? "FLEX (RB/WR/TE)" : pos === "IDPFLEX" ? "IDP FLEX (DL/LB/DB)" : posFullName(pos);
+    // Offense flex has no zone of its own — anyone beyond this position's
+    // own direct count is "the extra" filling the shared flex pool instead.
+    const flexExtraIds = isOffenseFlexEligible ? new Set(starters.slice(count).map((p) => p.id)) : undefined;
+    const label = pos === "IDPFLEX" ? "IDP FLEX (DL/LB/DB)" : posFullName(pos);
     const chipLabel = pos === "IDPFLEX" ? "FLX" : pos;
 
     return (
@@ -668,7 +702,13 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
           <CountBadge filled={starters.length} capacity={count} />
         </div>
 
-        <DropZone zoneKey={zoneKey} players={starters} emptyText="Drop players here" {...dropZoneHandlers} />
+        <DropZone
+          zoneKey={zoneKey}
+          players={starters}
+          flexExtraIds={flexExtraIds}
+          emptyText="Drop players here"
+          {...dropZoneHandlers}
+        />
 
         {!isFlex ? (
           RESERVE_KINDS.map((kind) => {
@@ -688,9 +728,7 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
           })
         ) : (
           <p className="border-t border-dashed border-neutral-200 pt-1.5 text-[10px] italic text-neutral-500 dark:border-neutral-800">
-            {pos === "FLEX"
-              ? "Flex accepts RB / WR / TE — drag eligible players from their backup/stash sections."
-              : "IDP Flex accepts DL / LB / DB — drag eligible players from their backup/stash sections."}
+            IDP Flex accepts DL / LB / DB — drag eligible players from their backup/stash sections.
           </p>
         )}
       </div>
@@ -698,6 +736,7 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
   }
 
   const benchFilled = totalBenchCount(data.players);
+  const flexFilled = offenseFlexUsed(data.players, data.settings);
   const irPlayers = playersInZone(data.players, "ir");
   const taxiPlayers = playersInZone(data.players, "taxi");
   const cutPlayers = playersInZone(data.players, "cut");
@@ -825,11 +864,17 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
           <h2 className="text-base font-semibold">Roster</h2>
           <CountBadge filled={benchFilled} capacity={data.settings.BENCH} />
           <span className="text-xs text-neutral-500">bench</span>
+          {data.settings.FLEX > 0 && (
+            <>
+              <CountBadge filled={flexFilled} capacity={data.settings.FLEX} />
+              <span className="text-xs text-neutral-500">flex</span>
+            </>
+          )}
         </div>
 
         <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-400">Offense</h3>
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
-          {(["QB", "RB", "WR", "TE", "FLEX", "K", "P", "DEF"] as const).map((pos) => renderPositionColumn(pos))}
+          {(["QB", "RB", "WR", "TE", "K", "P", "DEF"] as const).map((pos) => renderPositionColumn(pos))}
         </div>
 
         {idpVisible && (

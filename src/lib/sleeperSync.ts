@@ -154,7 +154,7 @@ function settingsFromRosterPositions(positions: string[], reserveSlots: number, 
         settings[pos]++;
         break;
       case "FLEX":
-      case "SUPER_FLEX": // no dedicated superflex zone here — folded into FLEX
+      case "SUPER_FLEX": // counts toward the shared flex pool's size, not a zone of its own
         settings.FLEX++;
         break;
       case "IDP_FLEX":
@@ -171,18 +171,18 @@ function settingsFromRosterPositions(positions: string[], reserveSlots: number, 
 }
 
 // `playerPosition` (the mapped depth-chart position of whoever's actually in
-// this slot) only matters for SUPER_FLEX: unlike every other slot, which
-// position it is depends on who's in it. A QB shows in the QB section like
-// any other starting QB; anyone else (RB/WR/TE) shows in FLEX, since that's
-// the closest zone this app has to "flexible non-QB slot."
+// this slot) is what FLEX/SUPER_FLEX resolve against: there's no dedicated
+// offense-flex zone — a flex-filling player lands in their own position's
+// zone (a QB in a superflex slot shows in QB, a WR in a flex slot shows in
+// WR), and "is this the extra one" is a display-time computation based on
+// order within that zone. IDP FLEX keeps its own dedicated zone as-is.
 function starterZoneForSlot(slot: string, playerPosition: string | null): string | null {
   switch (slot) {
     case "QB": case "RB": case "WR": case "TE": case "K": case "DEF": case "DL": case "LB": case "DB":
       return `starter-${slot}`;
     case "FLEX":
-      return "starter-FLEX";
     case "SUPER_FLEX":
-      return playerPosition === "QB" ? "starter-QB" : "starter-FLEX";
+      return playerPosition ? `starter-${playerPosition}` : null;
     case "IDP_FLEX":
       return "starter-IDPFLEX";
     default:

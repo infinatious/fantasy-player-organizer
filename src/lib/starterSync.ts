@@ -4,7 +4,14 @@
 // paste gets demoted to bench. Bench/order among non-starters is left
 // untouched — this only ever moves players into or out of "starter-*".
 import { normalizeName } from "./normalize";
-import { type DepthChartData, type DepthChartPlayer, type DepthChartSettings, uid } from "./depthChart";
+import {
+  type DepthChartData,
+  type DepthChartPlayer,
+  type DepthChartSettings,
+  OFFENSE_FLEX_POSITIONS,
+  offenseFlexUsed,
+  uid,
+} from "./depthChart";
 
 export interface StartingPlayerInput {
   playerId: string | null;
@@ -32,14 +39,10 @@ export function stripBenchSection(text: string): string {
   return idx === -1 ? text : lines.slice(0, idx).join("\n");
 }
 
-const FLEX_ELIGIBLE: Record<string, keyof DepthChartSettings> = {
-  RB: "FLEX",
-  WR: "FLEX",
-  TE: "FLEX",
-  DL: "IDPFLEX",
-  LB: "IDPFLEX",
-  DB: "IDPFLEX",
-};
+// IDP flex keeps its own dedicated zone — only offense flex was folded into
+// each position's own zone (see offenseFlexUsed in depthChart.ts).
+const IDP_FLEX_POSITIONS = new Set(["DL", "LB", "DB"]);
+const OFFENSE_FLEX_POSITION_SET = new Set<string>(OFFENSE_FLEX_POSITIONS);
 
 function playerKey(playerId: string | null, name: string): string {
   return playerId ?? `name:${normalizeName(name)}`;
@@ -75,30 +78,31 @@ export function computeStarterSync(current: DepthChartData, starters: StartingPl
     if (existingIdx !== -1 && players[existingIdx].zone.startsWith("starter-")) continue;
 
     const settingsKey = s.position as keyof DepthChartSettings;
-    const directCap = settings[settingsKey] ?? 0;
-    const flexKey = FLEX_ELIGIBLE[s.position];
-    const flexCap = flexKey ? settings[flexKey] : 0;
-    if (directCap === 0 && flexCap === 0) {
-      // League doesn't use this position in starters at all (e.g. IDP off)
-      // — nothing sensible to promote into, leave the player where they are.
-      continue;
-    }
-
+    const directCap = (settings[settingsKey] as number | undefined) ?? 0;
     const directZone = `starter-${s.position}`;
     const directCount = players.filter((p) => p.zone === directZone).length;
+    const isOffenseFlex = OFFENSE_FLEX_POSITION_SET.has(s.position);
+    const isIdpFlex = IDP_FLEX_POSITIONS.has(s.position);
 
-    let zone: string;
-    if (directCount < directCap) {
-      zone = directZone;
-    } else if (flexKey && players.filter((p) => p.zone === `starter-${flexKey}`).length < flexCap) {
-      zone = `starter-${flexKey}`;
+    let zone = directZone;
+    if (isOffenseFlex) {
+      if (directCap === 0 && settings.FLEX === 0) continue; // not used at all in this league
+      // Always their own zone — offense flex has no zone of its own; flag
+      // overflow only if even the shared flex pool has no room left.
+      if (directCount >= directCap && offenseFlexUsed(players, settings) >= settings.FLEX) overflow = true;
+    } else if (isIdpFlex) {
+      if (directCap === 0 && settings.IDPFLEX === 0) continue; // e.g. IDP off entirely
+      if (directCount >= directCap) {
+        const idpFlexCount = players.filter((p) => p.zone === "starter-IDPFLEX").length;
+        if (idpFlexCount < settings.IDPFLEX) {
+          zone = "starter-IDPFLEX";
+        } else {
+          overflow = true;
+        }
+      }
     } else {
-      // No configured room left anywhere for this position — still honor
-      // "add them to starting" rather than silently dropping the player,
-      // but flag it so the UI can tell the user their slot counts look
-      // stale (e.g. paste always shows 3 starting RBs but settings say 2).
-      zone = directZone;
-      overflow = true;
+      if (directCap === 0) continue; // position not used at all (e.g. K/DEF off)
+      if (directCount >= directCap) overflow = true;
     }
 
     const order = nextOrder(players, zone);
