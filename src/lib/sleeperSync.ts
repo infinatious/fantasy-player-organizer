@@ -35,6 +35,30 @@ export interface SleeperTeamOption {
   playerCount: number;
 }
 
+interface SleeperMatchupEntry {
+  roster_id: number;
+  matchup_id: number | null;
+  starters: string[] | null;
+}
+
+export interface SleeperMatchupPlayer {
+  playerId: string;
+  displayName: string;
+  team: string | null;
+  position: string | null;
+}
+
+export interface SleeperMatchupResult {
+  myLabel: string;
+  opponentLabel: string | null;
+  minePlayers: SleeperMatchupPlayer[];
+  opponentPlayers: SleeperMatchupPlayer[];
+}
+
+function teamLabel(t: SleeperTeamOption): string {
+  return t.teamName ? `${t.teamName} (${t.ownerName})` : t.ownerName;
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Sleeper API ${res.status} for ${url}`);
@@ -65,6 +89,56 @@ export async function listSleeperTeams(
     };
   });
   return { leagueName: league.name, teams };
+}
+
+// This week's actual starting lineup for both sides of a matchup — separate
+// from listSleeperTeams/buildDepthChartFromSleeper's "current roster" state,
+// since a specific week's lineup (including past weeks) can differ from
+// what's live right now. Feeds the weekly Enter Rosters flow instead of the
+// persistent depth chart.
+export async function fetchWeekMatchup(
+  sleeperLeagueId: string,
+  week: number,
+  rosterId: number,
+  lookup: (id: string) => PlayerRow | undefined = getPlayerById
+): Promise<SleeperMatchupResult> {
+  const [matchups, { teams }] = await Promise.all([
+    fetchJson<SleeperMatchupEntry[]>(`${SLEEPER_BASE}/league/${sleeperLeagueId}/matchups/${week}`),
+    listSleeperTeams(sleeperLeagueId),
+  ]);
+
+  const mine = matchups.find((m) => m.roster_id === rosterId);
+  if (!mine) throw new Error(`No matchup data for roster ${rosterId} in week ${week}`);
+
+  const teamByRosterId = new Map(teams.map((t) => [t.rosterId, t]));
+  const labelFor = (id: number) => {
+    const t = teamByRosterId.get(id);
+    return t ? teamLabel(t) : `Roster ${id}`;
+  };
+
+  const toPlayers = (ids: string[] | null): SleeperMatchupPlayer[] =>
+    (ids ?? [])
+      .filter((id) => id && id !== "0")
+      .map((id) => {
+        const p = lookup(id);
+        return {
+          playerId: id,
+          displayName: p?.full_name ?? id,
+          team: p?.team ?? null,
+          position: p?.position ?? null,
+        };
+      });
+
+  // Bye weeks (odd team count) leave a roster with no matchup_id/partner.
+  const opponent =
+    mine.matchup_id != null ? matchups.find((m) => m.matchup_id === mine.matchup_id && m.roster_id !== rosterId) : undefined;
+
+  return {
+    myLabel: labelFor(rosterId),
+    opponentLabel: opponent ? labelFor(opponent.roster_id) : null,
+    minePlayers: toPlayers(mine.starters),
+    opponentPlayers: toPlayers(opponent?.starters ?? null),
+  };
 }
 
 // Sleeper's roster_positions has one BN entry per bench slot but keeps IR

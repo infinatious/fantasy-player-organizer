@@ -6,6 +6,7 @@ import { type ParsedLine, type Row, rowFromParsedLine, rowFromSavedEntry } from 
 import { withBasePath } from "@/lib/basePath";
 import { mapToDepthChartPosition, normalizeDepthChartData } from "@/lib/depthChart";
 import { computeStarterSync, type StartingPlayerInput } from "@/lib/starterSync";
+import { SleeperMatchupModal, type SleeperMatchupData, type SleeperMatchupPlayer } from "./SleeperMatchupModal";
 
 interface SavedEntryWithOpponent {
   raw_text: string;
@@ -40,6 +41,7 @@ export function MatchupEntry({
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [sleeperOpen, setSleeperOpen] = useState(false);
   const loadedKey = useRef<string | null>(null);
 
   const panels: [Row[], Row[]] | null = panelA && panelB ? [panelA, panelB] : null;
@@ -114,6 +116,33 @@ export function MatchupEntry({
       );
     }
     setParsing(false);
+  }
+
+  function rowFromSleeperPlayer(p: SleeperMatchupPlayer): Row {
+    return {
+      rawLine: p.displayName,
+      playerId: p.playerId,
+      displayName: p.displayName,
+      team: p.team,
+      position: p.position,
+      candidates: [],
+      searchOpen: false,
+      searchQuery: "",
+      searchResults: [],
+    };
+  }
+
+  function applySleeperMatchup(result: SleeperMatchupData) {
+    setWarning(null);
+    setPanelA(result.minePlayers.map(rowFromSleeperPlayer));
+    setPanelB(result.opponentPlayers.map(rowFromSleeperPlayer));
+    setLabelA(result.myLabel);
+    setLabelB(result.opponentLabel ?? "Opponent (bye week?)");
+    setMineIndex(0);
+    setOpponentLabel(result.opponentLabel ?? "");
+    if (!result.opponentLabel) {
+      setWarning("No opponent found for this week on Sleeper (bye week?) — only your side was filled in.");
+    }
   }
 
   function movePlayer(fromIndex: 0 | 1, rowIndex: number) {
@@ -233,6 +262,24 @@ export function MatchupEntry({
         </div>
         {warning && <p className="mt-2 text-sm text-amber-600">{warning}</p>}
       </div>
+
+      <div className="flex items-center gap-3 text-xs text-neutral-500">
+        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+        or
+        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+      </div>
+
+      <button
+        onClick={() => setSleeperOpen(true)}
+        className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
+        title="Prototype: pull both teams' actual starters for this week straight from Sleeper's API"
+      >
+        Sync from Sleeper
+      </button>
+
+      {sleeperOpen && (
+        <SleeperMatchupModal week={weekNumber} onSync={applySleeperMatchup} onClose={() => setSleeperOpen(false)} />
+      )}
 
       {panels && (
         <>
