@@ -20,6 +20,7 @@ import { playerImageUrl, positionBadgeClasses, teamGlowStyle, teamLogoUrl } from
 import { withBasePath } from "@/lib/basePath";
 import type { PlayerRow } from "@/lib/players";
 import { PasteRosterModal, type ImportItem } from "./PasteRosterModal";
+import { SleeperSyncModal } from "./SleeperSyncModal";
 
 const ACCEPT = buildAcceptMap();
 
@@ -277,6 +278,7 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
+  const [sleeperOpen, setSleeperOpen] = useState(false);
 
   const [modalMode, setModalMode] = useState<"closed" | "add" | "edit">("closed");
   const [form, setForm] = useState<PlayerFormState>({
@@ -775,6 +777,13 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
             Paste Roster
           </button>
           <button
+            onClick={() => setSleeperOpen(true)}
+            className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
+            title="Prototype: pull starters/bench/IR/taxi straight from Sleeper's API"
+          >
+            Sync from Sleeper
+          </button>
+          <button
             onClick={loadSampleData}
             className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
           >
@@ -1064,6 +1073,16 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
 
       {pasteOpen && (
         <PasteRosterModal settings={data.settings} onImport={importPlayers} onClose={() => setPasteOpen(false)} />
+      )}
+
+      {sleeperOpen && (
+        <SleeperSyncModal
+          onSync={(synced) => {
+            commit(synced);
+            showToast("Synced from Sleeper");
+          }}
+          onClose={() => setSleeperOpen(false)}
+        />
       )}
 
       {toastMsg && (
