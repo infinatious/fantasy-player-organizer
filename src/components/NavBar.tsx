@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "./ThemeToggle";
+import { TenantName } from "./TenantName";
 import packageJson from "../../package.json";
 import { withBasePath } from "@/lib/basePath";
 
@@ -49,6 +50,7 @@ export function NavBar() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <TenantName />
           <span className="text-xs text-neutral-400 dark:text-neutral-500">v{packageJson.version}</span>
           <ThemeToggle />
         </div>
