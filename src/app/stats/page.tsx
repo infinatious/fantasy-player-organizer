@@ -5,7 +5,7 @@ import { useSeasonWeek } from "@/context/SeasonWeekContext";
 import { SeasonWeekPicker } from "@/components/SeasonWeekPicker";
 import { PlatformBadge } from "@/components/PlatformBadge";
 import { normalizeDepthChartData, type DepthChartPlayer } from "@/lib/depthChart";
-import { playerImageUrl, positionBadgeClasses } from "@/lib/teamColors";
+import { playerImageUrl, positionBadgeClasses, teamLogoUrl, TEAM_COLORS } from "@/lib/teamColors";
 import type { Platform } from "@/lib/platforms";
 
 interface League {
@@ -23,14 +23,25 @@ interface ResultRow {
   result: "W" | "L" | "T";
 }
 
-interface RosterCountRow {
+type ZoneCategory = "starter" | "bench" | "other";
+
+interface PlayerAggRow {
   key: string;
   player: DepthChartPlayer;
   leagueIds: number[];
+  categoriesByLeague: Map<number, ZoneCategory>;
+}
+
+interface ConflictRow {
+  key: string;
+  player: DepthChartPlayer;
+  startingIn: string[];
+  benchedIn: string[];
 }
 
 const SERIOUS_THRESHOLD = 5;
 const RESULT_OPTIONS = ["W", "L", "T"] as const;
+const SEVERE_INJURY_STATUSES = new Set(["OUT", "IR", "PUP", "NA"]);
 
 function initials(name: string): string {
   return name
@@ -54,6 +65,30 @@ function formatRecord(r: { w: number; l: number; t: number }): string {
   return r.t > 0 ? `${r.w}-${r.l}-${r.t}` : `${r.w}-${r.l}`;
 }
 
+function computeStreak(rows: ResultRow[]): { result: "W" | "L" | "T"; count: number } | null {
+  const sorted = [...rows].sort((a, b) => a.week_number - b.week_number);
+  if (sorted.length === 0) return null;
+  const last = sorted[sorted.length - 1].result;
+  let count = 0;
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    if (sorted[i].result !== last) break;
+    count++;
+  }
+  return { result: last, count };
+}
+
+function zoneCategory(zone: string): ZoneCategory {
+  if (zone.startsWith("starter-")) return "starter";
+  if (zone.startsWith("backup-") || zone.startsWith("stash-")) return "bench";
+  return "other";
+}
+
+function injuryBadgeClasses(status: string): string {
+  return SEVERE_INJURY_STATUSES.has(status.toUpperCase())
+    ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+    : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300";
+}
+
 function RosterAvatar({ player }: { player: DepthChartPlayer }) {
   const [imgError, setImgError] = useState(false);
   return player.playerId && !imgError ? (
@@ -71,11 +106,30 @@ function RosterAvatar({ player }: { player: DepthChartPlayer }) {
   );
 }
 
+function TeamLogo({ team }: { team: string }) {
+  const [imgError, setImgError] = useState(false);
+  return imgError ? (
+    <div className="h-8 w-8 shrink-0 rounded-full bg-neutral-200 dark:bg-neutral-800" />
+  ) : (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={teamLogoUrl(team)}
+      alt=""
+      className="h-8 w-8 shrink-0 object-contain"
+      onError={() => setImgError(true)}
+    />
+  );
+}
+
 export default function StatsPage() {
   const { seasonYear, weekNumber } = useSeasonWeek();
   const [leagues, setLeagues] = useState<League[]>([]);
   const [results, setResults] = useState<ResultRow[]>([]);
-  const [rosterCounts, setRosterCounts] = useState<RosterCountRow[]>([]);
+  const [rosterCounts, setRosterCounts] = useState<PlayerAggRow[]>([]);
+  const [conflictPlayers, setConflictPlayers] = useState<ConflictRow[]>([]);
+  const [teamStacking, setTeamStacking] = useState<[string, number][]>([]);
+  const [positionBreakdown, setPositionBreakdown] = useState<[string, number][]>([]);
+  const [injuryWatch, setInjuryWatch] = useState<PlayerAggRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [onlySerious, setOnlySerious] = useState(false);
   const [resultsModalOpen, setResultsModalOpen] = useState(false);
@@ -100,22 +154,67 @@ export default function StatsPage() {
           return { league: l, data: normalizeDepthChartData(d.data) };
         })
       );
-      const tally = new Map<string, { player: DepthChartPlayer; leagueIds: Set<number> }>();
+
+      const tally = new Map<string, PlayerAggRow>();
+      const teamCounts = new Map<string, number>();
+      const positionCounts = new Map<string, number>();
+
       depthCharts.forEach(({ league, data }) => {
         data.players.forEach((p) => {
           if (p.zone === "cut") return;
+
+          if (p.team) teamCounts.set(p.team, (teamCounts.get(p.team) ?? 0) + 1);
+          positionCounts.set(p.position, (positionCounts.get(p.position) ?? 0) + 1);
+
           const key = p.playerId ?? `name:${p.name.toLowerCase()}`;
-          const entry = tally.get(key);
-          if (entry) entry.leagueIds.add(league.id);
-          else tally.set(key, { player: p, leagueIds: new Set([league.id]) });
+          let entry = tally.get(key);
+          if (!entry) {
+            entry = { key, player: p, leagueIds: [], categoriesByLeague: new Map() };
+            tally.set(key, entry);
+          }
+          if (!entry.leagueIds.includes(league.id)) entry.leagueIds.push(league.id);
+          entry.categoriesByLeague.set(league.id, zoneCategory(p.zone));
         });
       });
-      const rows = [...tally.entries()]
-        .map(([key, v]) => ({ key, player: v.player, leagueIds: [...v.leagueIds] }))
-        .filter((r) => r.leagueIds.length > 1)
-        .sort((a, b) => b.leagueIds.length - a.leagueIds.length)
-        .slice(0, 20);
-      setRosterCounts(rows);
+
+      const allRows = [...tally.values()];
+
+      setRosterCounts(
+        allRows
+          .filter((r) => r.leagueIds.length > 1)
+          .sort((a, b) => b.leagueIds.length - a.leagueIds.length)
+          .slice(0, 20)
+      );
+
+      setInjuryWatch(
+        allRows
+          .filter((r) => r.player.injuryStatus)
+          .sort((a, b) => {
+            const aSevere = SEVERE_INJURY_STATUSES.has((a.player.injuryStatus ?? "").toUpperCase());
+            const bSevere = SEVERE_INJURY_STATUSES.has((b.player.injuryStatus ?? "").toUpperCase());
+            if (aSevere !== bSevere) return aSevere ? -1 : 1;
+            return a.player.name.localeCompare(b.player.name);
+          })
+      );
+
+      const leagueLabel = (id: number) => {
+        const l = leagueList.find((league) => league.id === id);
+        return l ? l.team_name || l.name : "Unknown";
+      };
+      setConflictPlayers(
+        allRows
+          .map((r) => {
+            const cats = [...r.categoriesByLeague.entries()];
+            const startingIn = cats.filter(([, c]) => c === "starter").map(([id]) => leagueLabel(id));
+            const benchedIn = cats.filter(([, c]) => c === "bench").map(([id]) => leagueLabel(id));
+            return { key: r.key, player: r.player, startingIn, benchedIn };
+          })
+          .filter((r) => r.startingIn.length > 0 && r.benchedIn.length > 0)
+      );
+
+      setTeamStacking([...teamCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10));
+      setPositionBreakdown([...positionCounts.entries()].sort((a, b) => b[1] - a[1]));
+
       setLoading(false);
     })();
   }, [seasonYear]);
@@ -142,6 +241,10 @@ export default function StatsPage() {
     const ids = new Set(filteredLeagues.map((l) => l.id));
     return record(results.filter((r) => ids.has(r.league_id)));
   }, [results, filteredLeagues]);
+
+  const maxTeamCount = teamStacking.length > 0 ? teamStacking[0][1] : 0;
+  const maxPositionCount = positionBreakdown.length > 0 ? Math.max(...positionBreakdown.map(([, c]) => c)) : 0;
+  const totalPositionCount = positionBreakdown.reduce((sum, [, c]) => sum + c, 0);
 
   if (loading) return <p className="text-sm text-neutral-500">Loading…</p>;
 
@@ -175,6 +278,43 @@ export default function StatsPage() {
       </section>
 
       <section className="space-y-3">
+        <h2 className="font-semibold">Current Streaks</h2>
+        {leagues.length === 0 ? (
+          <p className="text-sm text-neutral-500">No leagues yet.</p>
+        ) : (
+          <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900">
+            {leagues.map((l) => {
+              const streak = computeStreak(results.filter((r) => r.league_id === l.id));
+              return (
+                <li key={l.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <PlatformBadge platform={l.platform} />
+                    <p className="font-medium leading-tight">{l.team_name || l.name}</p>
+                  </div>
+                  {streak ? (
+                    <span
+                      className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                        streak.result === "W"
+                          ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+                          : streak.result === "L"
+                            ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                            : "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
+                      }`}
+                    >
+                      {streak.result}
+                      {streak.count}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-neutral-500">No results yet</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-3">
         <h2 className="font-semibold">Players Rostered in Most Leagues</h2>
         {rosterCounts.length === 0 ? (
           <p className="text-sm text-neutral-500">
@@ -201,6 +341,121 @@ export default function StatsPage() {
                   className="shrink-0 rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300"
                 >
                   {Math.round((r.leagueIds.length / leagues.length) * 100)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-semibold">Starting Here, Benched There</h2>
+        {conflictPlayers.length === 0 ? (
+          <p className="text-sm text-neutral-500">
+            No player is a starter in one league while benched in another right now.
+          </p>
+        ) : (
+          <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900">
+            {conflictPlayers.map((r) => (
+              <li key={r.key} className="flex items-center gap-3 px-4 py-2.5">
+                <RosterAvatar player={r.player} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium leading-tight">{r.player.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-neutral-500">
+                    Starting in {r.startingIn.join(", ")} · Benched in {r.benchedIn.join(", ")}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${positionBadgeClasses(r.player.position)}`}
+                >
+                  {r.player.position}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-semibold">Team Stacking</h2>
+        {teamStacking.length === 0 ? (
+          <p className="text-sm text-neutral-500">No rostered players yet.</p>
+        ) : (
+          <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900">
+            {teamStacking.map(([team, count]) => (
+              <li key={team} className="flex items-center gap-3 px-4 py-2.5">
+                <TeamLogo team={team} />
+                <span className="w-10 shrink-0 text-sm font-semibold" style={{ color: TEAM_COLORS[team] }}>
+                  {team}
+                </span>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${(count / maxTeamCount) * 100}%`,
+                      backgroundColor: TEAM_COLORS[team] ?? "#737373",
+                    }}
+                  />
+                </div>
+                <span className="w-6 shrink-0 text-right text-sm font-semibold text-neutral-600 dark:text-neutral-300">
+                  {count}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-semibold">Position Breakdown</h2>
+        {positionBreakdown.length === 0 ? (
+          <p className="text-sm text-neutral-500">No rostered players yet.</p>
+        ) : (
+          <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900">
+            {positionBreakdown.map(([pos, count]) => (
+              <li key={pos} className="flex items-center gap-3 px-4 py-2.5">
+                <span
+                  className={`w-10 shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-semibold ${positionBadgeClasses(pos)}`}
+                >
+                  {pos}
+                </span>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                  <div
+                    className="h-full rounded-full bg-neutral-400 dark:bg-neutral-500"
+                    style={{ width: `${(count / maxPositionCount) * 100}%` }}
+                  />
+                </div>
+                <span className="w-20 shrink-0 text-right text-xs text-neutral-500">
+                  {count} ({Math.round((count / totalPositionCount) * 100)}%)
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-semibold">Injury Watch</h2>
+        {injuryWatch.length === 0 ? (
+          <p className="text-sm text-neutral-500">No rostered players are currently flagged with an injury status.</p>
+        ) : (
+          <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900">
+            {injuryWatch.map((r) => (
+              <li key={r.key} className="flex items-center gap-3 px-4 py-2.5">
+                <RosterAvatar player={r.player} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium leading-tight">{r.player.name}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5">
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${positionBadgeClasses(r.player.position)}`}
+                    >
+                      {r.player.position}
+                    </span>
+                    {r.player.team && <span className="text-xs text-neutral-500">{r.player.team}</span>}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${injuryBadgeClasses(r.player.injuryStatus!)}`}>
+                  {r.player.injuryStatus}
                 </span>
               </li>
             ))}

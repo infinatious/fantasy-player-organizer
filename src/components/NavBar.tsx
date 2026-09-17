@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "./ThemeToggle";
+import packageJson from "../../package.json";
 
 const LINKS = [
   { href: "/leagues", label: "Leagues" },
@@ -46,7 +47,10 @@ export function NavBar() {
             })}
           </div>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-neutral-400 dark:text-neutral-500">v{packageJson.version}</span>
+          <ThemeToggle />
+        </div>
       </div>
     </nav>
   );

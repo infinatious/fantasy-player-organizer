@@ -8,6 +8,8 @@ set -euo pipefail
 APP_DIR="/opt/fantasy-team-organizer"
 APP_USER="kauffpc"
 SERVICE_NAME="fantasy-organizer"
+PORT="3000"
+DOMAIN_STATE_FILE="/etc/fantasy-organizer-domain"
 
 run_as_app_user() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -28,6 +30,25 @@ run_as_app_user "cd '$APP_DIR' && npm run build"
 
 echo "==> Restarting service"
 sudo systemctl restart "$SERVICE_NAME"
+
+if command -v caddy >/dev/null 2>&1; then
+  echo "==> Re-applying Caddy config"
+  if [ -s "$DOMAIN_STATE_FILE" ]; then
+    DOMAIN="$(cat "$DOMAIN_STATE_FILE")"
+    sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
+${DOMAIN} {
+	reverse_proxy 127.0.0.1:${PORT}
+}
+EOF
+  else
+    sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
+:80 {
+	reverse_proxy 127.0.0.1:${PORT}
+}
+EOF
+  fi
+  sudo systemctl reload caddy
+fi
 
 sleep 2
 echo "==> Service status"
