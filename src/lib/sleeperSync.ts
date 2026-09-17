@@ -170,13 +170,19 @@ function settingsFromRosterPositions(positions: string[], reserveSlots: number, 
   return settings;
 }
 
-function starterZoneForSlot(slot: string): string | null {
+// `playerPosition` (the mapped depth-chart position of whoever's actually in
+// this slot) only matters for SUPER_FLEX: unlike every other slot, which
+// position it is depends on who's in it. A QB shows in the QB section like
+// any other starting QB; anyone else (RB/WR/TE) shows in FLEX, since that's
+// the closest zone this app has to "flexible non-QB slot."
+function starterZoneForSlot(slot: string, playerPosition: string | null): string | null {
   switch (slot) {
     case "QB": case "RB": case "WR": case "TE": case "K": case "DEF": case "DL": case "LB": case "DB":
       return `starter-${slot}`;
     case "FLEX":
-    case "SUPER_FLEX":
       return "starter-FLEX";
+    case "SUPER_FLEX":
+      return playerPosition === "QB" ? "starter-QB" : "starter-FLEX";
     case "IDP_FLEX":
       return "starter-IDPFLEX";
     default:
@@ -226,7 +232,8 @@ export async function buildDepthChartFromSleeper(
   const starters = roster.starters ?? [];
   starters.forEach((playerId, i) => {
     if (!playerId || playerId === "0") return;
-    const zone = starterZoneForSlot(positions[i]);
+    const playerPosition = mapToDepthChartPosition(lookup(playerId)?.position ?? null);
+    const zone = starterZoneForSlot(positions[i], playerPosition);
     if (!zone) return;
     players.push(toDepthChartPlayer(playerId, zone, nextOrder(zone), lookup));
     placed.add(playerId);
