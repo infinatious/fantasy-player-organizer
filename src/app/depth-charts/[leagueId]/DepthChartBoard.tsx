@@ -46,28 +46,6 @@ function computeInsertIndex(container: HTMLElement, clientY: number, excludeId: 
 // Real Sleeper player IDs so the sample roster shows actual headshots —
 // otherwise every card would fall back to initials, which defeats the
 // purpose of a visual demo.
-const SAMPLE_PLAYERS: Array<[string, string, string, string, string]> = [
-  ["Patrick Mahomes", "QB", "KC", "backup", "4046"],
-  ["Jalen Hurts", "QB", "PHI", "backup", "6904"],
-  ["Bijan Robinson", "RB", "ATL", "backup", "9509"],
-  ["Breece Hall", "RB", "NYJ", "backup", "8155"],
-  ["De'Von Achane", "RB", "MIA", "stash", "9226"],
-  ["CeeDee Lamb", "WR", "DAL", "backup", "6786"],
-  ["Justin Jefferson", "WR", "MIN", "backup", "6794"],
-  ["Puka Nacua", "WR", "LAR", "backup", "9493"],
-  ["Sam LaPorta", "TE", "DET", "backup", "10859"],
-  ["Trey McBride", "TE", "ARI", "backup", "8130"],
-  ["Harrison Butker", "K", "KC", "backup", "4227"],
-  ["Micah Parsons", "LB", "DAL", "backup", "7640"],
-  ["Fred Warner", "LB", "SF", "backup", "5041"],
-  ["Antoine Winfield Jr.", "DB", "TB", "backup", "6888"],
-  ["Myles Garrett", "DL", "CLE", "backup", "3973"],
-  ["Rashee Rice", "WR", "KC", "cut", "10229"],
-  ["Zack Moss", "RB", "CIN", "cut", "6845"],
-  ["Jaylen Wright", "RB", "MIA", "stash", "11643"],
-  ["Ricky Pearsall", "WR", "SF", "stash", "11638"],
-];
-
 interface PlayerFormState {
   id: string | null;
   name: string;
@@ -278,7 +256,6 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
   const [hoverZone, setHoverZone] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [sleeperOpen, setSleeperOpen] = useState(false);
 
@@ -539,58 +516,12 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
     showToast("Settings applied");
   }
 
-  function loadSampleData() {
-    if (!data) return;
-    if (data.players.length > 0 && !confirm("Add sample players on top of your current roster?")) return;
-    const players = [...data.players];
-    SAMPLE_PLAYERS.forEach(([name, position, team, destination, playerId]) => {
-      const zoneKey = destination === "backup" || destination === "stash" ? `${destination}-${position}` : destination;
-      const orders = players.filter((p) => p.zone === zoneKey).map((p) => p.order);
-      const order = orders.length ? Math.max(...orders) + 1 : 0;
-      players.push({ id: uid(), playerId, name, position, team, injuryStatus: null, zone: zoneKey, order });
-    });
-    commit({ ...data, players });
-    showToast("Sample roster loaded — drag players into your lineup");
-  }
-
   function resetAll() {
     if (!confirm("Reset all players and settings for this team? This cannot be undone.")) return;
     const next = emptyDepthChartData();
     commit(next);
     setDraft(next.settings);
     showToast("Everything reset");
-  }
-
-  function exportJson() {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `depth-chart-league-${leagueId}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const parsed = JSON.parse(String(evt.target?.result));
-        const next = normalizeDepthChartData(parsed);
-        commit(next);
-        setDraft(next.settings);
-        showToast("Depth chart imported");
-      } catch {
-        showToast("Could not read file");
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
   }
 
   function openAddModal() {
@@ -701,9 +632,20 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
   function renderPositionColumn(pos: string) {
     if (!data) return null;
     const count = data.settings[pos as keyof DepthChartSettings] ?? 0;
-    if (count <= 0) return null;
-    const zoneKey = `starter-${pos}`;
     const isFlex = FLEX_TYPES.includes(pos);
+    // A position with zero dedicated starter slots still needs its own
+    // column — and bench/stash space — whenever it can fill a flex slot
+    // (e.g. an IDP-flex-only league has DL/LB/DB all at 0 but still needs
+    // somewhere to bench those players) or already has players rostered
+    // there from before a settings change.
+    const flexEligible =
+      !isFlex &&
+      ((["RB", "WR", "TE"].includes(pos) && data.settings.FLEX > 0) ||
+        (["DL", "LB", "DB"].includes(pos) && data.settings.IDPFLEX > 0));
+    const hasRosteredPlayers =
+      !isFlex && RESERVE_KINDS.some((kind) => playersInZone(data.players, `${kind}-${pos}`).length > 0);
+    if (count <= 0 && !flexEligible && !hasRosteredPlayers) return null;
+    const zoneKey = `starter-${pos}`;
     const starters = playersInZone(data.players, zoneKey);
     const label = pos === "FLEX" ? "FLEX (RB/WR/TE)" : pos === "IDPFLEX" ? "IDP FLEX (DL/LB/DB)" : posFullName(pos);
     const chipLabel = pos === "IDPFLEX" ? "FLX" : pos;
@@ -787,22 +729,6 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
           >
             Sync from Sleeper
           </button>
-          <button
-            onClick={loadSampleData}
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
-          >
-            Load Sample Roster
-          </button>
-          <button
-            onClick={exportJson}
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
-          >
-            Export JSON
-          </button>
-          <label className="cursor-pointer rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700">
-            Import JSON
-            <input ref={importInputRef} type="file" accept="application/json" hidden onChange={handleImportFile} />
-          </label>
           <button
             onClick={resetAll}
             className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-900/20"
