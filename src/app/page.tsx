@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSeasonWeek } from "@/context/SeasonWeekContext";
 import { SeasonWeekPicker } from "@/components/SeasonWeekPicker";
 import { teamGlowStyle, playerImageUrl, positionBadgeClasses, teamLogoUrl, TEAM_COLORS } from "@/lib/teamColors";
+import { withBasePath } from "@/lib/basePath";
 
 interface DashboardLeagueRef {
   leagueId: number;
@@ -109,7 +110,7 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const res = await fetch(`/api/dashboard?season=${seasonYear}&week=${weekNumber}`);
+    const res = await fetch(withBasePath(`/api/dashboard?season=${seasonYear}&week=${weekNumber}`));
     const data = await res.json();
     setTimeslots(data.timeslots ?? []);
     setUnmatchedCount(data.unmatchedCount ?? 0);
@@ -125,7 +126,7 @@ export default function DashboardPage() {
   async function refreshSchedule() {
     setRefreshing(true);
     setError(null);
-    const res = await fetch(`/api/schedule?season=${seasonYear}&week=${weekNumber}&force=true`);
+    const res = await fetch(withBasePath(`/api/schedule?season=${seasonYear}&week=${weekNumber}&force=true`));
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(data.error ?? "Failed to refresh schedule");

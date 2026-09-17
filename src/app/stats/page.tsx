@@ -7,6 +7,7 @@ import { PlatformBadge } from "@/components/PlatformBadge";
 import { normalizeDepthChartData, type DepthChartPlayer } from "@/lib/depthChart";
 import { playerImageUrl, positionBadgeClasses, teamLogoUrl, TEAM_COLORS } from "@/lib/teamColors";
 import type { Platform } from "@/lib/platforms";
+import { withBasePath } from "@/lib/basePath";
 
 interface League {
   id: number;
@@ -138,8 +139,8 @@ export default function StatsPage() {
     (async () => {
       setLoading(true);
       const [leaguesRes, resultsRes] = await Promise.all([
-        fetch("/api/leagues"),
-        fetch(`/api/results?season=${seasonYear}`),
+        fetch(withBasePath("/api/leagues")),
+        fetch(withBasePath(`/api/results?season=${seasonYear}`)),
       ]);
       const leaguesData = await leaguesRes.json();
       const resultsData = await resultsRes.json();
@@ -149,7 +150,7 @@ export default function StatsPage() {
 
       const depthCharts = await Promise.all(
         leagueList.map(async (l) => {
-          const r = await fetch(`/api/depth-chart/${l.id}`);
+          const r = await fetch(withBasePath(`/api/depth-chart/${l.id}`));
           const d = await r.json();
           return { league: l, data: normalizeDepthChartData(d.data) };
         })
@@ -225,7 +226,7 @@ export default function StatsPage() {
       if (result) next.push({ league_id: leagueId, season_year: seasonYear, week_number: week, result });
       return next;
     });
-    await fetch("/api/results", {
+    await fetch(withBasePath("/api/results"), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ leagueId, seasonYear, weekNumber: week, result }),

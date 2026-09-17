@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RowsEditor } from "./RowsEditor";
 import { type ParsedLine, type Row, type SavedEntry, rowFromParsedLine, rowFromSavedEntry } from "./rosterRows";
+import { withBasePath } from "@/lib/basePath";
 
 export function RosterPasteBox({
   title,
@@ -35,7 +36,7 @@ export function RosterPasteBox({
     setStatus(null);
     (async () => {
       const res = await fetch(
-        `/api/roster?season=${seasonYear}&week=${weekNumber}&leagueId=${leagueId}&side=${side}`
+        withBasePath(`/api/roster?season=${seasonYear}&week=${weekNumber}&leagueId=${leagueId}&side=${side}`)
       );
       const data = await res.json();
       const entries: SavedEntry[] = data.entries ?? [];
@@ -52,7 +53,7 @@ export function RosterPasteBox({
   async function handleParse() {
     setParsing(true);
     setStatus(null);
-    const res = await fetch("/api/roster/parse", {
+    const res = await fetch(withBasePath("/api/roster/parse"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
@@ -66,7 +67,7 @@ export function RosterPasteBox({
   async function handleSave() {
     setSaving(true);
     setStatus(null);
-    await fetch("/api/roster", {
+    await fetch(withBasePath("/api/roster"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

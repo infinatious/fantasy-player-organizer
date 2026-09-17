@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getCurrentSeasonAndWeek } from "@/lib/weekUtils";
+import { withBasePath } from "@/lib/basePath";
 
 interface LeagueEntryStatus {
   leagueId: number;
@@ -21,7 +22,7 @@ export function WeeklyReminderBanner() {
     (async () => {
       const { seasonYear, weekNumber } = getCurrentSeasonAndWeek();
       setWeekNumber(weekNumber);
-      const res = await fetch(`/api/weekly-status?season=${seasonYear}&week=${weekNumber}`);
+      const res = await fetch(withBasePath(`/api/weekly-status?season=${seasonYear}&week=${weekNumber}`));
       const data = await res.json();
       const leagues: LeagueEntryStatus[] = data.leagues ?? [];
       setIncomplete(leagues.filter((l) => !l.hasMine || !l.hasOpponent));

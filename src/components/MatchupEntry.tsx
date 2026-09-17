@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RowsEditor } from "./RowsEditor";
 import { type ParsedLine, type Row, rowFromParsedLine, rowFromSavedEntry } from "./rosterRows";
+import { withBasePath } from "@/lib/basePath";
 
 interface SavedEntryWithOpponent {
   raw_text: string;
@@ -51,8 +52,8 @@ export function MatchupEntry({
     setText("");
     (async () => {
       const [mineRes, oppRes] = await Promise.all([
-        fetch(`/api/roster?season=${seasonYear}&week=${weekNumber}&leagueId=${leagueId}&side=mine`),
-        fetch(`/api/roster?season=${seasonYear}&week=${weekNumber}&leagueId=${leagueId}&side=opponent`),
+        fetch(withBasePath(`/api/roster?season=${seasonYear}&week=${weekNumber}&leagueId=${leagueId}&side=mine`)),
+        fetch(withBasePath(`/api/roster?season=${seasonYear}&week=${weekNumber}&leagueId=${leagueId}&side=opponent`)),
       ]);
       const mineData = await mineRes.json();
       const oppData = await oppRes.json();
@@ -82,7 +83,7 @@ export function MatchupEntry({
     setParsing(true);
     setStatus(null);
     setWarning(null);
-    const res = await fetch("/api/roster/parse-matchup", {
+    const res = await fetch(withBasePath("/api/roster/parse-matchup"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
@@ -128,7 +129,7 @@ export function MatchupEntry({
     setStatus(null);
     const opponentIndex = mineIndex === 0 ? 1 : 0;
     await Promise.all([
-      fetch("/api/roster", {
+      fetch(withBasePath("/api/roster"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -144,7 +145,7 @@ export function MatchupEntry({
           })),
         }),
       }),
-      fetch("/api/roster", {
+      fetch(withBasePath("/api/roster"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

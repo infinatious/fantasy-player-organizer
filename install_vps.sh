@@ -14,6 +14,14 @@
 # DOMAIN is optional. With it, Caddy gets you automatic HTTPS (Let's
 # Encrypt) for free. Without it, Caddy still fronts the app on plain :80
 # (no TLS) so the box is usable before DNS is pointed anywhere.
+#
+# This app has no login/auth. Instead, each install gets its own random
+# private path (a UUID) baked into the build via Next's `basePath`, so the
+# app only answers at https://DOMAIN/<uuid>/... — hitting the bare domain
+# 404s. That's what lets several tenants share one domain/tunnel, each
+# routed (in Cloudflare Tunnel, or wherever) to their own box/uuid. The
+# generated uuid is persisted so re-runs and update_app.sh reuse the same
+# one instead of silently breaking existing links/tunnel routes.
 set -euo pipefail
 
 APP_DIR="/opt/fantasy-team-organizer"
@@ -24,6 +32,7 @@ DOMAIN="${2:-}"
 NODE_MAJOR="22"
 PORT="3000"
 DOMAIN_STATE_FILE="/etc/fantasy-organizer-domain"
+PATH_STATE_FILE="/etc/fantasy-organizer-path"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run this as root (sudo ./install_vps.sh)." >&2
@@ -88,11 +97,21 @@ else
 fi
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
+echo "==> Assigning private path"
+if [ -s "$PATH_STATE_FILE" ]; then
+  TENANT_PATH="$(cat "$PATH_STATE_FILE")"
+  echo "    reusing existing path from $PATH_STATE_FILE: $TENANT_PATH"
+else
+  TENANT_PATH="/$(cat /proc/sys/kernel/random/uuid)"
+  echo "$TENANT_PATH" > "$PATH_STATE_FILE"
+  echo "    generated new path: $TENANT_PATH"
+fi
+
 echo "==> Installing dependencies"
 run_as_app_user "cd '$APP_DIR' && npm ci"
 
 echo "==> Building"
-run_as_app_user "cd '$APP_DIR' && npm run build"
+run_as_app_user "cd '$APP_DIR' && NEXT_PUBLIC_BASE_PATH='$TENANT_PATH' npm run build"
 
 echo "==> Writing systemd unit"
 NPM_BIN="$(command -v npm)"
@@ -121,6 +140,7 @@ if [ -n "$DOMAIN" ]; then
   echo "$DOMAIN" > "$DOMAIN_STATE_FILE"
   cat > /etc/caddy/Caddyfile <<EOF
 ${DOMAIN} {
+	redir / ${TENANT_PATH}/ 302
 	reverse_proxy 127.0.0.1:${PORT}
 }
 EOF
@@ -129,6 +149,7 @@ else
   echo "    no domain given — Caddy will serve plain HTTP on :80, no TLS"
   cat > /etc/caddy/Caddyfile <<EOF
 :80 {
+	redir / ${TENANT_PATH}/ 302
 	reverse_proxy 127.0.0.1:${PORT}
 }
 EOF
@@ -139,6 +160,22 @@ cat > /etc/cron.d/fantasy-organizer-update <<EOF
 17 3 * * * root ${APP_DIR}/update_app.sh >> /var/log/fantasy-organizer-update.log 2>&1
 EOF
 chmod 644 /etc/cron.d/fantasy-organizer-update
+
+echo "==> Saving access URL for easy reference"
+if [ -n "$DOMAIN" ]; then
+  ACCESS_URL="https://${DOMAIN}${TENANT_PATH}/"
+else
+  ACCESS_URL="http://$(curl -s -4 ifconfig.me || hostname -I | awk '{print $1}')${TENANT_PATH}/"
+fi
+echo "$ACCESS_URL" > "/home/$APP_USER/fantasy-organizer-url.txt"
+chown "$APP_USER:$APP_USER" "/home/$APP_USER/fantasy-organizer-url.txt"
+cat > /etc/update-motd.d/99-fantasy-organizer <<EOF
+#!/bin/sh
+echo
+echo "Fantasy Player Organizer: ${ACCESS_URL}"
+echo "(also saved at ~${APP_USER}/fantasy-organizer-url.txt)"
+EOF
+chmod 755 /etc/update-motd.d/99-fantasy-organizer
 
 echo "==> Enabling and starting services"
 systemctl daemon-reload
@@ -151,9 +188,17 @@ echo "==> Service status"
 systemctl status "$SERVICE_NAME" --no-pager --lines=15
 
 echo "==> Verifying"
-curl -s -o /dev/null -w "app (127.0.0.1:${PORT}): %{http_code}\n" "http://127.0.0.1:${PORT}/" || true
-curl -s -o /dev/null -w "caddy (localhost:80):    %{http_code}\n" "http://localhost:80/" || true
+echo "    (bare '/' 404s/redirects by design — the app only answers under its private path)"
+curl -s -o /dev/null -w "app (127.0.0.1:${PORT}${TENANT_PATH}/): %{http_code}\n" "http://127.0.0.1:${PORT}${TENANT_PATH}/" || true
+curl -s -o /dev/null -w "caddy (localhost:80${TENANT_PATH}/):    %{http_code}\n" "http://localhost:80${TENANT_PATH}/" || true
 
+echo
+echo "=================================================================="
+echo " Your private URL (bookmark this — it's the only way in):"
+echo "   ${ACCESS_URL}"
+echo " Also saved to /home/${APP_USER}/fantasy-organizer-url.txt and shown"
+echo " on login (MOTD). Persisted at ${PATH_STATE_FILE} for update_app.sh."
+echo "=================================================================="
 echo
 if [ -n "$DOMAIN" ]; then
   echo "Done. Caddy is serving https://${DOMAIN} (auto-HTTPS via Let's Encrypt)"

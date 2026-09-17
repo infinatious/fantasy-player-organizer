@@ -1,6 +1,7 @@
 "use client";
 
 import type { PlayerRow, Row } from "./rosterRows";
+import { withBasePath } from "@/lib/basePath";
 
 export function RowsEditor({
   rows,
@@ -32,7 +33,7 @@ export function RowsEditor({
       return;
     }
     updateRow(index, { searchQuery: query });
-    const res = await fetch(`/api/players/search?q=${encodeURIComponent(query)}`);
+    const res = await fetch(withBasePath(`/api/players/search?q=${encodeURIComponent(query)}`));
     const data = await res.json();
     updateRow(index, { searchResults: data.players ?? [] });
   }

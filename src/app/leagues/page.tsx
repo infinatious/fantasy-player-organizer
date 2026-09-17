@@ -6,6 +6,7 @@ import { PlatformBadge } from "@/components/PlatformBadge";
 import type { Platform } from "@/lib/platforms";
 import { type DepthChartPlayer, STARTER_ORDER, normalizeDepthChartData } from "@/lib/depthChart";
 import { playerImageUrl } from "@/lib/teamColors";
+import { withBasePath } from "@/lib/basePath";
 
 interface League {
   id: number;
@@ -86,14 +87,14 @@ export default function LeaguesPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/leagues");
+    const res = await fetch(withBasePath("/api/leagues"));
     const data = await res.json();
     const list: League[] = data.leagues ?? [];
     setLeagues(list);
 
     const entries = await Promise.all(
       list.map(async (l) => {
-        const r = await fetch(`/api/depth-chart/${l.id}`);
+        const r = await fetch(withBasePath(`/api/depth-chart/${l.id}`));
         const d = await r.json();
         const normalized = normalizeDepthChartData(d.data);
         return [l.id, sortedStarters(normalized.players)] as const;
@@ -132,9 +133,9 @@ export default function LeaguesPage() {
       weight: form.weight,
     });
     if (modalMode === "edit" && editingId) {
-      await fetch(`/api/leagues/${editingId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body });
+      await fetch(withBasePath(`/api/leagues/${editingId}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, body });
     } else {
-      await fetch("/api/leagues", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+      await fetch(withBasePath("/api/leagues"), { method: "POST", headers: { "Content-Type": "application/json" }, body });
     }
     setSaving(false);
     setModalMode("closed");
@@ -143,7 +144,7 @@ export default function LeaguesPage() {
 
   async function removeLeague(id: number) {
     if (!confirm("Delete this league and all its saved rosters?")) return;
-    await fetch(`/api/leagues/${id}`, { method: "DELETE" });
+    await fetch(withBasePath(`/api/leagues/${id}`), { method: "DELETE" });
     setModalMode("closed");
     await load();
   }

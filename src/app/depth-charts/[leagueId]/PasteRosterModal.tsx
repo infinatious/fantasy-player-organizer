@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { POSITIONS, mapToDepthChartPosition, type DepthChartSettings } from "@/lib/depthChart";
 import type { PlayerRow } from "@/lib/players";
+import { withBasePath } from "@/lib/basePath";
 
 const SETTINGS_LABELS: Record<keyof DepthChartSettings, string> = {
   QB: "QB",
@@ -96,7 +97,7 @@ export function PasteRosterModal({
   async function handleParse() {
     if (!text.trim()) return;
     setParsing(true);
-    const res = await fetch("/api/roster/parse", {
+    const res = await fetch(withBasePath("/api/roster/parse"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
@@ -124,7 +125,7 @@ export function PasteRosterModal({
       updateRow(id, { searchResults: [] });
       return;
     }
-    const res = await fetch(`/api/players/search?q=${encodeURIComponent(query)}`);
+    const res = await fetch(withBasePath(`/api/players/search?q=${encodeURIComponent(query)}`));
     const data = await res.json();
     updateRow(id, { searchResults: data.players ?? [] });
   }

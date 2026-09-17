@@ -17,6 +17,7 @@ import {
   uid,
 } from "@/lib/depthChart";
 import { playerImageUrl, positionBadgeClasses, teamGlowStyle, teamLogoUrl } from "@/lib/teamColors";
+import { withBasePath } from "@/lib/basePath";
 import type { PlayerRow } from "@/lib/players";
 import { PasteRosterModal, type ImportItem } from "./PasteRosterModal";
 
@@ -295,8 +296,8 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
     let cancelled = false;
     (async () => {
       const [dcRes, leaguesRes] = await Promise.all([
-        fetch(`/api/depth-chart/${leagueId}`),
-        fetch("/api/leagues"),
+        fetch(withBasePath(`/api/depth-chart/${leagueId}`)),
+        fetch(withBasePath("/api/leagues")),
       ]);
       const dc = await dcRes.json();
       const leaguesData = await leaguesRes.json();
@@ -321,7 +322,7 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
       return;
     }
     const handle = setTimeout(async () => {
-      const res = await fetch(`/api/players/search?q=${encodeURIComponent(query)}`);
+      const res = await fetch(withBasePath(`/api/players/search?q=${encodeURIComponent(query)}`));
       const json = await res.json();
       setSuggestions(json.players ?? []);
     }, 250);
@@ -337,7 +338,7 @@ export function DepthChartBoard({ leagueId }: { leagueId: number }) {
   async function commit(next: DepthChartData) {
     setData(next);
     try {
-      await fetch(`/api/depth-chart/${leagueId}`, {
+      await fetch(withBasePath(`/api/depth-chart/${leagueId}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(next),

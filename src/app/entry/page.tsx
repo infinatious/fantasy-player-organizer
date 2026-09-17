@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSeasonWeek } from "@/context/SeasonWeekContext";
 import { RosterPasteBox } from "@/components/RosterPasteBox";
 import { MatchupEntry } from "@/components/MatchupEntry";
+import { withBasePath } from "@/lib/basePath";
 
 interface League {
   id: number;
@@ -26,7 +27,7 @@ export default function EntryPage() {
 
   useEffect(() => {
     (async () => {
-      const res = await fetch("/api/leagues");
+      const res = await fetch(withBasePath("/api/leagues"));
       const data = await res.json();
       setLeagues(data.leagues);
       if (data.leagues.length > 0) {

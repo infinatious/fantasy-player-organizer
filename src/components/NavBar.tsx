@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "./ThemeToggle";
 import packageJson from "../../package.json";
+import { withBasePath } from "@/lib/basePath";
 
 const LINKS = [
   { href: "/leagues", label: "Leagues" },
@@ -21,7 +22,7 @@ export function NavBar() {
           <Link href="/leagues" className="flex items-center gap-3 shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/infinatious-sports.svg"
+              src={withBasePath("/infinatious-sports.svg")}
               alt="Infinatious Sports"
               className="h-7 w-auto invert dark:invert-0"
             />
