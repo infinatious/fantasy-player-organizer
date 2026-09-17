@@ -179,9 +179,14 @@ chmod 755 /etc/update-motd.d/99-fantasy-organizer
 
 echo "==> Enabling and starting services"
 systemctl daemon-reload
-systemctl enable --now "$SERVICE_NAME"
-systemctl enable --now caddy
-systemctl reload caddy
+systemctl enable "$SERVICE_NAME"
+# `restart` (not `enable --now`) so a re-run picks up a changed unit file
+# even if the service is already active — e.g. an older install that had
+# the app itself bound to :80 before Caddy existed would otherwise keep
+# squatting on that port and Caddy would fail to bind it.
+systemctl restart "$SERVICE_NAME"
+systemctl enable caddy
+systemctl restart caddy
 
 sleep 2
 echo "==> Service status"
