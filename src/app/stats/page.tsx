@@ -304,27 +304,27 @@ export default function StatsPage() {
                 <li key={l.id} className="flex items-center justify-between gap-3 px-4 py-3">
                   <div className="flex items-center gap-3">
                     <PlatformBadge platform={l.platform} />
-                    <div>
-                      <p className="font-medium leading-tight">{l.team_name || l.name}</p>
-                      <p className="text-xs text-neutral-500">{formatRecord(record(leagueResults))}</p>
-                    </div>
+                    <p className="font-medium leading-tight">{l.team_name || l.name}</p>
                   </div>
-                  {streak ? (
-                    <span
-                      className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                        streak.result === "W"
-                          ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
-                          : streak.result === "L"
-                            ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
-                            : "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
-                      }`}
-                    >
-                      {streak.result}
-                      {streak.count}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-neutral-500">No results yet</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-neutral-500">{formatRecord(record(leagueResults))}</span>
+                    {streak ? (
+                      <span
+                        className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                          streak.result === "W"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+                            : streak.result === "L"
+                              ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                              : "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
+                        }`}
+                      >
+                        {streak.result}
+                        {streak.count}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-neutral-500">No results yet</span>
+                    )}
+                  </div>
                 </li>
               );
             })}

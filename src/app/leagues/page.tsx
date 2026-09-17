@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { PlatformBadge } from "@/components/PlatformBadge";
 import type { Platform } from "@/lib/platforms";
@@ -41,10 +42,32 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
+// The tooltip renders through a portal to document.body, positioned by its
+// own fixed coordinates rather than living inside the avatar. Two rounds of
+// fixes tried to keep it inline: it was getting clipped by the row's
+// horizontal-overflow container (edge avatars) and painted underneath
+// higher-stacked avatars from the same row or from other league cards
+// (since each avatar's z-index only wins locally, not page-wide). A portal
+// with a flat, page-level z-index sidesteps both — it isn't a descendant of
+// any clipping/stacking ancestor anymore.
 function StarterAvatar({ player, zIndex }: { player: DepthChartPlayer; zIndex: number }) {
   const [imgError, setImgError] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  function showTooltip() {
+    const rect = ref.current?.getBoundingClientRect();
+    if (rect) setTooltipPos({ left: rect.left + rect.width / 2, top: rect.top });
+  }
+
   return (
-    <div className="group relative -ml-6 shrink-0 first:ml-0" style={{ zIndex }}>
+    <div
+      ref={ref}
+      className="relative -ml-6 shrink-0 first:ml-0"
+      style={{ zIndex }}
+      onMouseEnter={showTooltip}
+      onMouseLeave={() => setTooltipPos(null)}
+    >
       {player.playerId && !imgError ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -58,10 +81,18 @@ function StarterAvatar({ player, zIndex }: { player: DepthChartPlayer; zIndex: n
           {initials(player.name)}
         </div>
       )}
-      <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-neutral-900 px-2 py-1 text-xs font-medium text-white opacity-0 shadow transition-opacity group-hover:opacity-100 dark:bg-white dark:text-neutral-900">
-        {player.name} · {player.position}
-        {player.team ? ` ${player.team}` : ""}
-      </div>
+      {tooltipPos &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="pointer-events-none fixed z-[999] -translate-x-1/2 -translate-y-[calc(100%+6px)] whitespace-nowrap rounded bg-neutral-900 px-2 py-1 text-xs font-medium text-white shadow dark:bg-white dark:text-neutral-900"
+            style={{ left: tooltipPos.left, top: tooltipPos.top }}
+          >
+            {player.name} · {player.position}
+            {player.team ? ` ${player.team}` : ""}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -198,13 +229,7 @@ export default function LeaguesPage() {
                     .
                   </p>
                 ) : (
-                  // overflow-x-hidden paired with overflow-y-visible doesn't work — per
-                  // spec, "hidden" on one axis forces the other's "visible" to compute as
-                  // "auto" too (since a real scroll container needs both axes resolved),
-                  // which would still clip the tooltip above this row. overflow-x-clip
-                  // doesn't establish a scroll container, so it isn't subject to that
-                  // coupling and overflow-y-visible actually stays visible.
-                  <div className="relative flex min-w-0 flex-1 items-center overflow-x-clip overflow-y-visible">
+                  <div className="relative flex min-w-0 flex-1 items-center overflow-x-hidden">
                     {starters[l.id].map((p, i) => (
                       <StarterAvatar key={p.id} player={p} zIndex={starters[l.id].length - i} />
                     ))}
